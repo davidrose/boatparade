@@ -196,6 +196,48 @@
             transition: opacity 0.3s ease;
         }
 
+        /* Heading overlay */
+        #heading-overlay {
+            position: fixed;
+            top: 50%;
+            right: 40px;
+            transform: translateY(-50%);
+            z-index: 250;
+            display: none;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        #heading-value {
+            font-size: 72px;
+            font-weight: 800;
+            color: #fff;
+            text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+            font-family: 'Inter', sans-serif;
+            line-height: 1;
+        }
+
+        #heading-label {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.7);
+            font-family: 'Inter', sans-serif;
+            margin-top: 4px;
+        }
+
+        .iso-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #fff;
+            font-size: 12px;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+        }
+
+        .iso-toggle input {
+            cursor: pointer;
+        }
+
         #isolate-overlay.active {
             opacity: 1;
             pointer-events: all;
@@ -341,9 +383,17 @@
         <div id="isolate-overlay">
             <div id="isolate-title">Isolated View</div>
             <div id="btn-exit-isolate">Back to Parade</div>
+            <label class="iso-toggle">
+                <input type="checkbox" id="cb-iso-autorotate" checked>
+                Auto Rotate
+            </label>
             <div id="isolate-fov" style="display:none; margin-top: 10px;">
                 <label style="color:#fff; font-size:13px;">HFOV: <span id="iso-hfov-val">55</span>°</label>
                 <input type="range" id="iso-hfov-slider" min="20" max="120" step="1" value="55" style="width:160px;">
+            </div>
+            <div id="heading-overlay">
+                <div id="heading-value">000°</div>
+                <div id="heading-label">Heading</div>
             </div>
         </div>
 
@@ -538,6 +588,8 @@
         let isolatedCamZ = 0;
         let isolatedCamY = 8;
         let isolatedWheelHandler = null;
+        let isoAutoRotate = true;
+        let selectedCloneIndex = -1;
         let originalCameraState = { pos: new THREE.Vector3(), target: new THREE.Vector3(), fov: 55 };
         let defaultVFov = 55; // default vertical fov
 
@@ -797,6 +849,15 @@
                 document.getElementById('hfov-val').textContent = currentHFOV;
             });
 
+            document.getElementById('cb-iso-autorotate').addEventListener('change', (e) => {
+                isoAutoRotate = e.target.checked;
+                if (isoAutoRotate) {
+                    selectedCloneIndex = -1;
+                    const ho = document.getElementById('heading-overlay');
+                    if (ho) ho.style.display = 'none';
+                }
+            });
+
             document.getElementById('btn-exit-isolate').addEventListener('click', exitIsolatedMode);
         }
 
@@ -898,17 +959,25 @@
                         // (ground planes were already hidden during model loading)
                     });
 
-                    // Position clone.
-                    const xOffset = dist * 0.8;
-                    clone.position.set(xOffset, 0, -dist);
+                    // Spread left-to-right: closest boat on left, farthest on right
+                    const midDist = (distances[0] + distances[distances.length - 1]) / 2;
+                    const rightOffset = (dist - midDist) * 0.5;
+                    clone.position.set(rightOffset, 0, -dist);
 
                     // Make sure rotation is standard (facing camera -> +Z)
                     clone.rotation.set(0, Math.PI, 0);
 
                     isolatedGroup.add(clone);
 
+                    // Store baseline rotation for heading = 0°
+                    const baseRotY = clone.rotation.y; // Math.PI
+
+                    // Create heading mast (vertical line + heading sprite)
+                    const mastGroup = createHeadingMast(clone);
+                    clone.add(mastGroup);
+
                     // Track clone for pixel count computation
-                    isolatedCloneData.push({ clone, dist, vesselFeet: boatData.vesselFeet, origScale: clone.scale.x, origFeet: boatData.vesselFeet });
+                    isolatedCloneData.push({ clone, dist, vesselFeet: boatData.vesselFeet, origScale: clone.scale.x, origFeet: boatData.vesselFeet, baseRotY, mastGroup });
                 });
 
                 // Create 3D distance label elements (arrows) for each clone
@@ -953,12 +1022,12 @@
                 });
 
 
-                // Lock camera to ego boat position (origin), looking straight ahead
-                isolatedCamY = 8;
+                // Lock camera to ego boat position, looking straight ahead along -Z
+                isolatedCamY = 3;
                 isolatedCamX = 0;
-                isolatedCamZ = 0;
+                isolatedCamZ = 5;
                 camera.position.set(isolatedCamX, isolatedCamY, isolatedCamZ);
-                controls.target.set(0, isolatedCamY * 0.5, -200);
+                controls.target.set(0, isolatedCamY * 0.3, -200);
 
                 // Set HFOV to 55 degrees
                 camera.fov = getVFOV(55, camera.aspect);
@@ -972,7 +1041,7 @@
                     e.preventDefault();
                     isolatedCamY = Math.max(2, Math.min(80, isolatedCamY - e.deltaY * 0.05));
                     camera.position.y = isolatedCamY;
-                    controls.target.set(0, isolatedCamY * 0.5, -200);
+                    controls.target.set(0, isolatedCamY * 0.3, -200);
                     camera.updateProjectionMatrix();
                 };
                 renderer.domElement.addEventListener('wheel', isolatedWheelHandler, { passive: false });
@@ -1060,7 +1129,8 @@
                         dl.addEventListener('mousedown', (e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            distDragState = { index: i, startY: e.clientY, startDist: data.dist };
+                            const xzRatio = data.clone.position.x / Math.abs(data.clone.position.z || 1);
+                            distDragState = { index: i, startY: e.clientY, startDist: data.dist, xzRatio };
                             if (data.distArrows) data.distArrows.visible = true;
                             document.body.style.cursor = 'ns-resize';
                         });
@@ -1159,19 +1229,14 @@
         document.addEventListener('mousemove', (e) => {
             // Distance drag
             if (distDragState) {
-                const { index, startY, startDist } = distDragState;
-                const deltaY = startY - e.clientY; // up = positive = further
-                const newDist = Math.max(20, startDist + deltaY * 1.5);
+                const { index, startY, startDist, xzRatio } = distDragState;
+                const deltaY = startY - e.clientY; // up = positive
+                const newDist = Math.max(20, startDist + deltaY * 0.8);
                 const data = isolatedCloneData[index];
                 if (!data) return;
 
-                // Keep the boat on its specific trajectory line by finding its original X/Z ratio
-                // Default dist is basically data.clone.position.z * -1. 
-                // We'll figure out the ratio of X to Z.
-                const originalRatio = data.clone.position.x / Math.abs(data.clone.position.z);
-
                 data.dist = newDist;
-                const xOffset = newDist * originalRatio;
+                const xOffset = newDist * xzRatio;
                 data.clone.position.set(xOffset, 0, -newDist);
                 const midX = xOffset / 2;
                 const midZ = -newDist / 2;
@@ -1245,13 +1310,120 @@
                 if (hits.length > 0) {
                     const idx = hits[0].object.userData._isoCloneIdx;
                     rotateDragState = { cloneIndex: idx, startX: e.clientX };
+                    selectedCloneIndex = idx;
+                    // Auto-stop rotation when grabbing a boat
+                    isoAutoRotate = false;
+                    const cb = document.getElementById('cb-iso-autorotate');
+                    if (cb) cb.checked = false;
                     controls.enabled = false;
+                }
+            });
+        }
+
+        // Compute heading in degrees (0°=north) from a clone's Y rotation
+        function getCloneHeading(data) {
+            let rawDeg = THREE.MathUtils.radToDeg(data.clone.rotation.y - data.baseRotY);
+            let heading = ((-rawDeg) % 360 + 360) % 360;
+            heading = Math.round(heading);
+            if (heading === 360) heading = 0;
+            return heading;
+        }
+
+        // Create a heading mast: vertical line from bbox center + sprite at top
+        function createHeadingMast(clone) {
+            const group = new THREE.Group();
+
+            // Compute local bounding box of clone to find center and top
+            const box = new THREE.Box3().setFromObject(clone);
+            const center = new THREE.Vector3();
+            const size = new THREE.Vector3();
+            box.getCenter(center);
+            box.getSize(size);
+
+            // Convert world center to local coordinates of clone
+            clone.worldToLocal(center);
+            const mastHeight = size.y * 1.5; // rise 1.5x the bbox height above center
+
+            // Vertical line (mast pole)
+            const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+            const lineGeo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(center.x, center.y, center.z),
+                new THREE.Vector3(center.x, center.y + mastHeight, center.z)
+            ]);
+            const mastLine = new THREE.LineSegments(lineGeo, lineMat);
+            group.add(mastLine);
+
+            // Heading sprite at top of mast
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.roundRect(0, 0, 256, 128, 16);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 72px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('000°', 128, 64);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
+            const sprite = new THREE.Sprite(spriteMat);
+            const spriteScale = Math.max(size.x, size.z) * 0.6;
+            sprite.scale.set(spriteScale, spriteScale * 0.5, 1);
+            sprite.position.set(center.x, center.y + mastHeight + spriteScale * 0.3, center.z);
+            group.add(sprite);
+
+            // Store references for updates
+            group.userData.headingCanvas = canvas;
+            group.userData.headingCtx = ctx;
+            group.userData.headingTexture = texture;
+            group.userData.headingSprite = sprite;
+
+            // Initially hidden (shows when auto-rotate is off)
+            group.visible = false;
+
+            return group;
+        }
+
+        // Update heading sprite texture for a specific clone
+        function updateHeadingMast(data) {
+            if (!data.mastGroup) return;
+            const heading = getCloneHeading(data);
+            const { headingCtx: ctx, headingTexture: texture, headingCanvas: canvas } = data.mastGroup.userData;
+            if (!ctx) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            ctx.roundRect(0, 0, 256, 128, 16);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 72px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${String(heading).padStart(3, '0')}°`, 128, 64);
+            texture.needsUpdate = true;
+        }
+
+        // Update all heading displays in isolated mode
+        function updateHeadingDisplay() {
+            isolatedCloneData.forEach(data => {
+                if (data.mastGroup) {
+                    data.mastGroup.visible = !isoAutoRotate;
+                    if (!isoAutoRotate) updateHeadingMast(data);
                 }
             });
         }
 
         function exitIsolatedMode() {
             isIsolated = false;
+            isoAutoRotate = true;
+            selectedCloneIndex = -1;
+            const autoRotCb = document.getElementById('cb-iso-autorotate');
+            if (autoRotCb) autoRotCb.checked = true;
+            const ho = document.getElementById('heading-overlay');
+            if (ho) ho.style.display = 'none';
             isolatedGroup.clear();
             isolatedCloneData = [];
             // Remove pixel count overlays, distance labels, and line canvas
@@ -1689,17 +1861,22 @@
                 }
             });
 
-            // Always spin clones in isolated view (regardless of Spinning Plates checkbox)
+            // Spin clones in isolated view only if auto-rotate is on
             if (isIsolated && isolatedGroup && isolatedCloneData.length > 0) {
-                // Slower rotation for very large vessels (e.g., > 200ft)
-                const isLarge = isolatedCloneData[0].vesselFeet > 200;
-                const spinRate = isLarge ? 0.15 : 0.3;
-                const spinAngle = elapsed * spinRate; // continuous rotation based on elapsed time
-                isolatedGroup.children.forEach(child => {
-                    // Only spin boat group clones, skip distance label sprites
-                    if (child.isSprite) return;
-                    child.rotation.y = spinAngle;
-                });
+                if (isoAutoRotate) {
+                    const isLarge = isolatedCloneData[0].vesselFeet > 200;
+                    const spinRate = isLarge ? 0.15 : 0.3;
+                    const spinAngle = elapsed * spinRate;
+                    isolatedGroup.children.forEach(child => {
+                        if (child.isSprite) return;
+                        child.rotation.y = spinAngle;
+                    });
+                    // Hide heading masts when auto-rotating
+                    updateHeadingDisplay();
+                } else {
+                    // Show heading for selected clone
+                    updateHeadingDisplay();
+                }
 
                 // Update pixel count labels for each clone
                 updateIsolatedPixelCounts();
