@@ -1,0 +1,1793 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOOKOUT 3D Boat Parade</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: #0a0e1a;
+            color: #e2e8f0;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* Header */
+        .header {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(2, 6, 23, 0.85);
+            padding: 14px 24px;
+            border-radius: 12px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #60a5fa 0%, #818cf8 50%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 0.5px;
+        }
+
+        .header .badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .header .boat-count {
+            font-size: 12px;
+            color: #94a3b8;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Controls Panel */
+        .controls-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(2, 6, 23, 0.85);
+            padding: 0;
+            border-radius: 12px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(59, 130, 246, 0.15);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            min-width: 200px;
+            overflow: hidden;
+        }
+
+        .panel-title {
+            font-size: 10px;
+            font-weight: 700;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            text-align: center;
+            padding: 10px 16px;
+            background: rgba(0, 0, 0, 0.6);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .panel-body {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .control-group label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #94a3b8;
+        }
+
+        .control-group label span {
+            color: #60a5fa;
+            font-family: 'Courier New', monospace;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #3b82f6;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            background: rgba(59, 130, 246, 0.1);
+            color: #93c5fd;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .btn:hover {
+            background: rgba(59, 130, 246, 0.25);
+            border-color: #3b82f6;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+        }
+
+        #loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #0a0e1a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 500;
+            transition: opacity 0.8s ease;
+        }
+
+        #loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Isolate Overlay */
+        #isolate-overlay {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            background: rgba(2, 6, 23, 0.9);
+            padding: 12px 24px;
+            border-radius: 12px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        #isolate-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        #isolate-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        #btn-exit-isolate {
+            padding: 8px 16px;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            border-radius: 8px;
+            background: rgba(239, 68, 68, 0.15);
+            color: #fca5a5;
+            font-weight: 600;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        #btn-exit-isolate:hover {
+            background: rgba(239, 68, 68, 0.3);
+            border-color: #ef4444;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 3px solid rgba(59, 130, 246, 0.15);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 24px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-text {
+            font-size: 14px;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+        #loading-progress {
+            margin-top: 8px;
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Info Panel Bottom */
+        .info-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(2, 6, 23, 0.8);
+            padding: 12px 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            font-size: 11px;
+            color: #64748b;
+            display: flex;
+            gap: 20px;
+        }
+
+        .info-panel kbd {
+            display: inline-block;
+            padding: 2px 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+            font-size: 10px;
+            color: #94a3b8;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Vessel labels */
+        .vessel-label {
+            position: absolute;
+            padding: 4px 10px;
+            background: rgba(0, 0, 0, 0.55);
+            color: #e2e8f0;
+            font-size: 10px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            border-radius: 4px;
+            pointer-events: none;
+            white-space: nowrap;
+            transform: translate(-50%, -100%);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            letter-spacing: 0.3px;
+            z-index: 50;
+            backdrop-filter: blur(4px);
+        }
+
+        /* Boat length labels */
+        .length-label {
+            position: absolute;
+            font-family: 'Inter', sans-serif;
+            font-size: 52px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.82);
+            pointer-events: none;
+            white-space: nowrap;
+            transform: translate(-50%, -50%);
+            text-shadow: 0 0 20px rgba(100, 180, 255, 0.6), 0 2px 8px rgba(0, 0, 0, 0.8);
+            letter-spacing: -1px;
+            z-index: 48;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="canvas-container">
+        <!-- Loading Overlay -->
+        <div id="loading-overlay">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading 3D Vessel Models...</div>
+            <div id="loading-progress">0 / 16</div>
+        </div>
+
+        <!-- Header -->
+        <div class="header">
+            <h1>LOOKOUT 3D Boat Parade</h1>
+            <div class="badge">THREE.JS</div>
+            <div class="boat-count" id="boat-count">Vessels: 0/16</div>
+        </div>
+
+        <!-- Isolate Overlay -->
+        <div id="isolate-overlay">
+            <div id="isolate-title">Isolated View</div>
+            <div id="btn-exit-isolate">Back to Parade</div>
+            <div id="isolate-fov" style="display:none; margin-top: 10px;">
+                <label style="color:#fff; font-size:13px;">HFOV: <span id="iso-hfov-val">55</span>°</label>
+                <input type="range" id="iso-hfov-slider" min="20" max="120" step="1" value="55" style="width:160px;">
+            </div>
+        </div>
+
+        <!-- Controls Panel -->
+        <div class="controls-panel">
+            <div class="panel-title">Parade Controls</div>
+            <div class="panel-body">
+                <div class="control-group">
+                    <label>Parade Speed: <span id="speed-val">0.0</span> kn</label>
+                    <input type="range" id="speed-slider" min="0" max="40" step="0.5" value="0">
+                </div>
+                <div class="control-group">
+                    <label>Wave Height: <span id="wave-val">1.0</span></label>
+                    <input type="range" id="wave-slider" min="0" max="3" step="0.1" value="1.0">
+                </div>
+                <div class="control-group">
+                    <label>Spacing: <span id="spacing-val">28</span>m</label>
+                    <input type="range" id="spacing-slider" min="1" max="1000" step="1" value="28">
+                </div>
+                <div class="btn" id="btn-reset-camera">Reset Camera</div>
+                <div class="control-group" style="flex-direction: row; align-items: center; gap: 8px; margin-top: 4px;">
+                    <input type="checkbox" id="cb-bounds" style="accent-color: #3b82f6; cursor: pointer;" checked>
+                    <label for="cb-bounds" style="cursor: pointer; margin: 0;">Bounding Boxes</label>
+                </div>
+                <div class="control-group" style="flex-direction: row; align-items: center; gap: 8px; margin-top: 4px;">
+                    <input type="checkbox" id="cb-arrows" style="accent-color: #3b82f6; cursor: pointer;" checked>
+                    <label for="cb-arrows" style="cursor: pointer; margin: 0;">Heading Arrows</label>
+                </div>
+                <div class="control-group" style="flex-direction: row; align-items: center; gap: 8px; margin-top: 4px;">
+                    <input type="checkbox" id="cb-plates" style="accent-color: #3b82f6; cursor: pointer;" checked>
+                    <label for="cb-plates" style="cursor: pointer; margin: 0;">Spinning Plates</label>
+                </div>
+                <div class="control-group" style="flex-direction: row; align-items: center; gap: 8px; margin-top: 4px;">
+                    <input type="checkbox" id="cb-spotlight" style="accent-color: #3b82f6; cursor: pointer;" checked>
+                    <label for="cb-spotlight" style="cursor: pointer; margin: 0;">Camera Headlight</label>
+                </div>
+                <div class="control-group" style="margin-top: 4px;">
+                    <label>HFOV: <span id="hfov-val">55</span>°</label>
+                    <input type="range" id="hfov-slider" min="20" max="120" step="1" value="55">
+                </div>
+                <div class="control-group">
+                    <label>Dir Light: <span id="dir-light-val">2.3</span></label>
+                    <input type="range" id="dir-light-slider" min="0" max="10" step="0.1" value="2.3">
+                </div>
+                <div class="control-group">
+                    <label>Amb Light: <span id="amb-light-val">0.1</span></label>
+                    <input type="range" id="amb-light-slider" min="0" max="5" step="0.1" value="0.1">
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Panel -->
+        <div class="info-panel">
+            <div><kbd>Drag</kbd> Orbit</div>
+            <div><kbd>Scroll</kbd> Zoom</div>
+            <div><kbd>Right-drag</kbd> Pan</div>
+        </div>
+        <div id="cam-height"
+            style="position:fixed;bottom:6px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.7);font-size:16px;font-family:Inter,sans-serif;pointer-events:none;z-index:100;text-shadow:0 1px 2px rgba(0,0,0,0.5);">
+            Camera Height: 0m</div>
+    </div>
+
+    <!-- Import Maps for Three.js -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { Water } from 'three/addons/objects/Water.js';
+        import { Sky } from 'three/addons/objects/Sky.js';
+
+        // ── Config ──────────────────────────────────────────
+        const MODEL_FILES = [
+            // Row 0 (front) — small craft
+            'AIS_JetSkis-A_001.glb',
+            'AIS_Kayak-A_001.glb',
+            'AIS-BOAT_CenterConsole_A_001.glb',
+            'AIS-BOAT_CenterConsole_B_001.glb',
+            // Row 1 — sailboats
+            'AIS_Sailboat-Small-A_001.glb',
+            'AIS_Sailboat-Medium-A_001.glb',
+            'AIS_Sailboat-Large-A_001.glb',
+            'AIS_Sailboat-SuperSail-A_001.glb',
+            // Row 2 — power vessels
+            'AIS_Powerboat-A_001.glb',
+            'AIS_FishingBoat-A_001.glb',
+            'AIS_Yacht-A_001.glb',
+            // Row 3 — large ships
+            'AIS_Ferry-A_001.glb',
+            'AIS_Military-A_001.glb',
+            'AIS_Tug-A_001.glb',
+            // Row 4 (back) — massive ships
+            'AIS_Tanker-A_001.glb',
+            'AIS_CruiseShip-A_001.glb',
+        ];
+
+        const FRIENDLY_NAMES = [
+            'Jet Skis', 'Kayak', 'Center Console 30', 'Center Console 45',
+            'Sailboat (S)', 'Sailboat (M)', 'Sailboat (L)', 'Super Sail',
+            'Powerboat 20', 'Fishing Boat', 'Yacht',
+            'Ferry', 'Military Cutter', 'Tug',
+            'Tanker', 'Cruise Ship',
+        ];
+
+        // Multi-row layout — grouped by category, ordered by size
+        // Row 0: Motorboats   Row 1: Sailboats   Row 2: Large vessels (spaced out)
+        const VESSEL_LAYOUT = [
+            [0, 0],  // 0  Jet Skis 3m
+            [0, 1],  // 1  Kayak 3.05m
+            [0, 3],  // 2  Center Console 30 9.14m
+            [0, 4],  // 3  Center Console 45 13.7m
+            [1, 0],  // 4  Sailboat (S) 4.6m
+            [1, 1],  // 5  Sailboat (M) 7.6m
+            [1, 2],  // 6  Sailboat (L) 12.2m
+            [1, 3],  // 7  Super Sail 27.4m
+            [0, 2],  // 8  Powerboat 20 6.1m
+            [0, 5],  // 9  Fishing Boat 15.2m
+            [0, 6],  // 10 Yacht 18.3m
+            [2, 1],  // 11 Ferry 100.6m
+            [2, 3],  // 12 Military Cutter 100.6m
+            [2, 0],  // 13 Tug 24.4m
+            [2, 5],  // 14 Tanker 304.8m
+            [2, 7],  // 15 Cruise Ship 304.8m
+        ];
+
+        const GRID_COLS = 8;
+        const GRID_ROWS = 3;
+
+        // Per-vessel sizes based on real-world typical lengths (meters)
+        const VESSEL_SCALES = {
+            'Center Console 30': 9.14,
+            'Center Console 45': 13.7,
+            'Cruise Ship': 304.8,
+            'Ferry': 100.6,
+            'Fishing Boat': 15.2,
+            'Jet Skis': 3,
+            'Kayak': 3.05,
+            'Military Cutter': 100.6,
+            'Powerboat 20': 6.1,
+            'Sailboat (L)': 12.2,
+            'Sailboat (M)': 7.6,
+            'Sailboat (S)': 4.6,
+            'Super Sail': 27.4,
+            'Tanker': 304.8,
+            'Tug': 24.4,
+            'Yacht': 18.3,
+        };
+
+        // ── State ───────────────────────────────────────────
+        let scene, camera, renderer, controls, water, sun;
+        let boats = [];           // { mesh, name, phase, gridRow, gridCol }
+        let labelsContainer;
+        let labelElements = [];
+        let leaderSvg;
+        let clock = new THREE.Clock();
+
+        let paradeSpeed = 0.0;    // knots
+        let waveHeight = 1.0;
+        let gridSpacing = 28;    // meters between boats
+        let paradeOffset = 0;     // accumulated forward movement
+        let lastBreadcrumbSec = -1; // for exact 1-second breadcrumb timing
+        let breadcrumbs = [];     // { mesh, birthTime }
+        const params = new URLSearchParams(window.location.search);
+        let showBounds = params.has('bounds') ? params.get('bounds') === 'true' : true;
+        let showPlates = params.has('plates') ? params.get('plates') === 'true' : true;
+        let showArrows = true;
+
+        // Raycasting & Isolation state
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+        let isIsolated = false;
+        let isolatedGroup = new THREE.Group();
+        let isolatedCloneData = []; // {clone, dist, distCuboid, distArrows}
+        let isolatedDirLight;
+
+        // Drag state for distance labels
+        let distDragState = null; // { index, startY, startDist }
+        // Drag state for boat rotation (horizontal drag on clone)
+        let rotateDragState = null; // { cloneIndex, startX }
+        // Drag state for size scaling
+        let scaleDragState = null; // { index, startX, startFeet }
+        let isolatedAmbientLight;
+        let isolatedCamX = 0;
+        let isolatedCamZ = 0;
+        let isolatedCamY = 8;
+        let isolatedWheelHandler = null;
+        let originalCameraState = { pos: new THREE.Vector3(), target: new THREE.Vector3(), fov: 55 };
+        let defaultVFov = 55; // default vertical fov
+
+        // ── Init ────────────────────────────────────────────
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 0.8;
+            renderer.shadowMap.enabled = false;
+            container.appendChild(renderer.domElement);
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x8899aa, 0.0008);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 10000);
+            camera.position.set(150, 80, -50);
+            defaultVFov = camera.fov;
+
+            // Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 2, 0);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.08;
+            controls.minDistance = 2;
+            controls.maxDistance = 2000;
+            controls.maxPolarAngle = Math.PI * 0.49; // Allow camera very close to water (~2m)
+            controls.update();
+
+            // Sun
+            sun = new THREE.Vector3();
+
+            // Gray overcast sky (simple gradient background)
+            scene.background = new THREE.Color(0x8899aa);
+            sun.set(0.3, 0.8, 0.4).normalize();
+
+            // Water
+            const waterGeometry = new THREE.PlaneGeometry(20000, 20000);
+            water = new Water(waterGeometry, {
+                textureWidth: 512,
+                textureHeight: 512,
+                waterNormals: new THREE.TextureLoader().load(
+                    'https://threejs.org/examples/textures/waternormals.jpg',
+                    function (texture) {
+                        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                    }
+                ),
+                sunDirection: new THREE.Vector3(sun.x, sun.y, sun.z).normalize(),
+                sunColor: 0xdde0e4,
+                waterColor: 0x1a4a5a,
+                distortionScale: 4.0,
+                fog: scene.fog !== undefined,
+            });
+            water.rotation.x = -Math.PI / 2;
+            water.position.y = 0;
+            scene.add(water);
+
+            // 10m × 10m Grid on water surface — extends to horizon
+            const gridSize = 5000;  // total grid extent
+            const gridStep = 10;    // 10m spacing
+            const gridMat = new THREE.LineBasicMaterial({ color: 0x3a5570, transparent: true, opacity: 0.25 });
+            const gridPoints = [];
+            for (let i = -gridSize; i <= gridSize; i += gridStep) {
+                // Lines along Z
+                gridPoints.push(new THREE.Vector3(i, 0.08, -gridSize));
+                gridPoints.push(new THREE.Vector3(i, 0.08, gridSize));
+                // Lines along X
+                gridPoints.push(new THREE.Vector3(-gridSize, 0.08, i));
+                gridPoints.push(new THREE.Vector3(gridSize, 0.08, i));
+            }
+            const gridGeo = new THREE.BufferGeometry().setFromPoints(gridPoints);
+            const gridLines = new THREE.LineSegments(gridGeo, gridMat);
+            scene.add(gridLines);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
+            scene.add(ambientLight);
+
+            const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x003366, 0.4);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 2.3);
+            dirLight.position.set(200, 500, 200);
+            scene.add(dirLight);
+
+            // Expose main lights globally for the UI sliders
+            window.ambientLight = ambientLight;
+            window.dirLight = dirLight;
+
+            // Camera headlight (spotlight)
+            const headLight = new THREE.SpotLight(0xfffff0, 4.0);
+            headLight.angle = Math.PI / 4;
+            headLight.penumbra = 0.5;
+            headLight.decay = 1.0;
+            headLight.distance = 2500;
+            headLight.castShadow = false;
+            headLight.shadow.camera.near = 10;
+            headLight.shadow.camera.far = 2500;
+            headLight.shadow.bias = -0.001;
+
+            // The spotlight's target follows the camera's forward vector.
+            const headLightTarget = new THREE.Object3D();
+            scene.add(headLightTarget);
+            headLight.target = headLightTarget;
+
+            // Attach headlight to the camera so it moves with it
+            camera.add(headLight);
+            scene.add(camera);
+
+            // Expose the headlight globally so UI and animate can update it / toggle it
+            window.headLight = headLight;
+            window.headLightTarget = headLightTarget;
+
+            // Dedicated Isolated Light to prevent dark scenes
+            isolatedDirLight = new THREE.DirectionalLight(0xffffff, 2.3);
+            isolatedDirLight.position.set(200, 500, 200); // Angle it from the front/side
+            isolatedDirLight.visible = false;
+            isolatedDirLight.castShadow = false;
+            scene.add(isolatedDirLight);
+
+            isolatedAmbientLight = new THREE.AmbientLight(0xffffff, 0.1);
+            isolatedAmbientLight.visible = false;
+            scene.add(isolatedAmbientLight);
+            // SVG overlay for leader lines
+            leaderSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            leaderSvg.style.position = 'absolute';
+            leaderSvg.style.top = '0';
+            leaderSvg.style.left = '0';
+            leaderSvg.style.width = '100%';
+            leaderSvg.style.height = '100%';
+            leaderSvg.style.pointerEvents = 'none';
+            leaderSvg.style.zIndex = '49';
+            container.appendChild(leaderSvg);
+
+            // Label container
+            labelsContainer = document.createElement('div');
+            labelsContainer.style.position = 'absolute';
+            labelsContainer.style.top = '0';
+            labelsContainer.style.left = '0';
+            labelsContainer.style.width = '100%';
+            labelsContainer.style.height = '100%';
+            labelsContainer.style.pointerEvents = 'none';
+            labelsContainer.style.overflow = 'hidden';
+            container.appendChild(labelsContainer);
+
+            // Add isolation group to scene
+            scene.add(isolatedGroup);
+
+            // Interaction mapping
+            renderer.domElement.addEventListener('pointerdown', onPointerDown);
+
+            // UI bindings
+            setupUI();
+
+            // Load models
+            loadAllModels();
+
+            // Resize handler
+            window.addEventListener('resize', onWindowResize);
+
+            // Animation loop
+            animate();
+        }
+
+        // ── UI ──────────────────────────────────────────────
+        function setupUI() {
+            document.getElementById('speed-slider').addEventListener('input', (e) => {
+                paradeSpeed = parseFloat(e.target.value);
+                document.getElementById('speed-val').textContent = paradeSpeed.toFixed(1);
+            });
+            document.getElementById('wave-slider').addEventListener('input', (e) => {
+                waveHeight = parseFloat(e.target.value);
+                document.getElementById('wave-val').textContent = waveHeight.toFixed(1);
+            });
+            document.getElementById('spacing-slider').addEventListener('input', (e) => {
+                gridSpacing = parseFloat(e.target.value);
+                document.getElementById('spacing-val').textContent = gridSpacing.toFixed(0);
+                repositionBoats();
+            });
+            document.getElementById('btn-reset-camera').addEventListener('click', () => {
+                if (isIsolated) return; // Ignore if isolated
+                camera.position.set(80, 50, 100);
+                controls.target.set(0, 2, 0);
+                controls.update();
+            });
+            document.getElementById('cb-bounds').addEventListener('change', (e) => {
+                showBounds = e.target.checked;
+                boats.forEach((boat) => {
+                    if (boat.bbox) boat.bbox.visible = showBounds;
+                });
+            });
+            document.getElementById('cb-plates').addEventListener('change', (e) => {
+                showPlates = e.target.checked;
+                boats.forEach((boat) => {
+                    if (boat.plate) boat.plate.visible = showPlates;
+                    if (!showPlates) {
+                        boat.spinY = 0;
+                        boat.mesh.rotation.y = 0;
+                    }
+                });
+            });
+            document.getElementById('cb-arrows').addEventListener('change', (e) => {
+                showArrows = e.target.checked;
+                boats.forEach((boat) => {
+                    if (boat.arrow) boat.arrow.visible = showArrows;
+                });
+            });
+            document.getElementById('cb-spotlight').addEventListener('change', (e) => {
+                if (window.headLight) {
+                    window.headLight.visible = e.target.checked;
+                }
+            });
+
+            document.getElementById('dir-light-slider').addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('dir-light-val').textContent = val.toFixed(1);
+                if (window.dirLight) window.dirLight.intensity = val;
+                if (window.isolatedDirLight) window.isolatedDirLight.intensity = val; // Keep isolated view synced
+            });
+
+            document.getElementById('amb-light-slider').addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('amb-light-val').textContent = val.toFixed(1);
+                if (window.ambientLight) window.ambientLight.intensity = val;
+                if (window.isolatedAmbientLight) window.isolatedAmbientLight.intensity = val; // Keep isolated view synced
+            });
+
+            // HFOV slider (parade view)
+            let currentHFOV = 55;
+            document.getElementById('hfov-slider').addEventListener('input', (e) => {
+                currentHFOV = parseInt(e.target.value);
+                document.getElementById('hfov-val').textContent = currentHFOV;
+                camera.fov = getVFOV(currentHFOV, camera.aspect);
+                camera.updateProjectionMatrix();
+                // Sync to isolated slider if it exists
+                const isoSlider = document.getElementById('iso-hfov-slider');
+                if (isoSlider) {
+                    isoSlider.value = currentHFOV;
+                    document.getElementById('iso-hfov-val').textContent = currentHFOV;
+                }
+            });
+
+            // HFOV slider (isolated view)
+            document.getElementById('iso-hfov-slider').addEventListener('input', (e) => {
+                currentHFOV = parseInt(e.target.value);
+                document.getElementById('iso-hfov-val').textContent = currentHFOV;
+                camera.fov = getVFOV(currentHFOV, camera.aspect);
+                camera.updateProjectionMatrix();
+                // Sync back to parade slider
+                document.getElementById('hfov-slider').value = currentHFOV;
+                document.getElementById('hfov-val').textContent = currentHFOV;
+            });
+
+            document.getElementById('btn-exit-isolate').addEventListener('click', exitIsolatedMode);
+        }
+
+        // ── Interaction / Isolation ─────────────────────────
+        function getVFOV(hFOV_deg, aspect) {
+            // Convert horizontal FOV to vertical FOV based on aspect ratio
+            const hFOV_rad = THREE.MathUtils.degToRad(hFOV_deg);
+            const vFOV_rad = 2 * Math.atan(Math.tan(hFOV_rad / 2) / aspect);
+            return THREE.MathUtils.radToDeg(vFOV_rad);
+        }
+
+        function onPointerDown(event) {
+            if (isIsolated) return; // already isolated, ignore standard clicks
+
+            // Calculate mouse position in normalized device coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            // Check intersections against all boat groups
+            const clickableMeshes = [];
+            boats.forEach(boat => {
+                // Collect actual meshes inside each boat group
+                boat.mesh.traverse(child => {
+                    if (child.isMesh && child.name !== "BoundingBoxCorners" && child.name !== "WaterPlate") {
+                        child.userData.boatIndex = boat.index; // Avoid circular reference for mesh.clone()
+                        clickableMeshes.push(child);
+                    }
+                });
+            });
+
+            const intersects = raycaster.intersectObjects(clickableMeshes, false);
+            if (intersects.length > 0) {
+                // Clicked a boat — find by original index, not array position
+                const clickedIndex = intersects[0].object.userData.boatIndex;
+                const clickedBoat = boats.find(b => b.index === clickedIndex);
+                if (clickedBoat) {
+                    enterIsolatedMode(clickedBoat);
+                }
+            }
+        }
+
+        function enterIsolatedMode(boatData) {
+            try {
+                isIsolated = true;
+                ensureRotationListener();
+
+                // Save camera state
+                originalCameraState.pos.copy(camera.position);
+                originalCameraState.target.copy(controls.target);
+                originalCameraState.fov = camera.fov;
+
+                // Hide parade elements
+                boats.forEach(b => {
+                    b.mesh.visible = false;
+                    if (b.bbox) b.bbox.visible = false;
+                    if (b.plate) b.plate.visible = false;
+                });
+                breadcrumbs.forEach(bc => bc.mesh.visible = false);
+                document.querySelector('.controls-panel').style.display = 'none';
+                document.querySelector('.header').style.display = 'none';
+                document.querySelector('.info-panel').style.display = 'none';
+                document.getElementById('isolate-overlay').classList.add('active');
+                document.getElementById('isolate-fov').style.display = 'block';
+                document.getElementById('isolate-title').textContent = `${boatData.name} — Isolated View`;
+
+                // Clear existing isolated group and clone data
+                isolatedGroup.clear();
+                isolatedCloneData = [];
+
+                // Toggle special isolated lighting
+                if (isolatedDirLight) isolatedDirLight.visible = true;
+                if (isolatedAmbientLight) isolatedAmbientLight.visible = true;
+
+                // Set up distances. First boat is at 0 (hero), the rest follow behind.
+                // User requested 4 clones spaced 100m away each (total 5 models including the original)
+                // For very large boats, increase the fan out distance to prevent overlap when they rotate.
+                let distances = [100, 200, 300, 400];
+                const isLargeVessel = boatData.name.includes("Cruise Ship") || boatData.name.includes("Tanker") || boatData.name.includes("Ferry");
+                if (isLargeVessel) {
+                    distances = [250, 500, 750, 1000];
+                }
+
+                distances.forEach((dist) => {
+                    // Clone the entire boat group so we have the gltf model AND the bounding box
+                    const clone = boatData.mesh.clone();
+                    // Ensure clone children are visible, preserving ground-plane hiding from model load
+                    clone.traverse(child => {
+                        if (child.name === "BoundingBox") {
+                            child.visible = true;
+                        } else if (child.name === "WaterPlate") {
+                            child.visible = false;
+                        } else if (!child.isMesh) {
+                            // Groups and Object3D containers must be visible
+                            child.visible = true;
+                        }
+                        // Meshes keep their visibility from the original model
+                        // (ground planes were already hidden during model loading)
+                    });
+
+                    // Position clone.
+                    const xOffset = dist * 0.8;
+                    clone.position.set(xOffset, 0, -dist);
+
+                    // Make sure rotation is standard (facing camera -> +Z)
+                    clone.rotation.set(0, Math.PI, 0);
+
+                    isolatedGroup.add(clone);
+
+                    // Track clone for pixel count computation
+                    isolatedCloneData.push({ clone, dist, vesselFeet: boatData.vesselFeet, origScale: clone.scale.x, origFeet: boatData.vesselFeet });
+                });
+
+                // Create 3D distance label elements (arrows) for each clone
+                isolatedCloneData.forEach((data, i) => {
+                    if (data.dist === 0) return;
+
+                    const midX = data.clone.position.x / 2;
+                    const midZ = -data.dist / 2;
+
+                    // ── Up/down arrows on water surface (hidden until hover) ──
+                    const arrowMat = new THREE.MeshStandardMaterial({
+                        color: 0xffffff, transparent: true, opacity: 0.8,
+                        depthWrite: false, roughness: 0.4, metalness: 0.3,
+                    });
+                    const coneR = 0.3, coneH = 1.0;
+                    // "Further" arrow (points away from camera, -Z)
+                    const furtherCone = new THREE.Mesh(
+                        new THREE.ConeGeometry(coneR, coneH, 8), arrowMat
+                    );
+                    furtherCone.rotation.x = Math.PI; // point -Z
+                    furtherCone.position.set(midX, 0.3, midZ - 2);
+                    // "Closer" arrow (points toward camera, +Z)
+                    const closerCone = new THREE.Mesh(
+                        new THREE.ConeGeometry(coneR, coneH, 8), arrowMat
+                    );
+                    closerCone.rotation.x = 0; // point +Z? No, default cone points +Y
+                    closerCone.rotation.x = 0;
+                    closerCone.rotation.z = Math.PI; // flip upside down
+                    closerCone.position.set(midX, 0.3, midZ + 2);
+
+                    // Rotate both to lay on water and point along Z
+                    // ConeGeometry points +Y by default. Rotate to point -Z (further)
+                    furtherCone.rotation.set(Math.PI / 2, 0, 0); // now points -Z
+                    closerCone.rotation.set(-Math.PI / 2, 0, 0); // now points +Z
+
+                    const arrowGroup = new THREE.Group();
+                    arrowGroup.add(furtherCone);
+                    arrowGroup.add(closerCone);
+                    arrowGroup.visible = false;
+                    isolatedGroup.add(arrowGroup);
+                    data.distArrows = arrowGroup;
+                });
+
+
+                // Lock camera to ego boat position (origin), looking straight ahead
+                isolatedCamY = 8;
+                isolatedCamX = 0;
+                isolatedCamZ = 0;
+                camera.position.set(isolatedCamX, isolatedCamY, isolatedCamZ);
+                controls.target.set(0, isolatedCamY * 0.5, -200);
+
+                // Set HFOV to 55 degrees
+                camera.fov = getVFOV(55, camera.aspect);
+                camera.updateProjectionMatrix();
+
+                // Disable orbit controls in isolated mode
+                controls.enabled = false;
+
+                // Custom scroll handler for height adjustment only
+                isolatedWheelHandler = (e) => {
+                    e.preventDefault();
+                    isolatedCamY = Math.max(2, Math.min(80, isolatedCamY - e.deltaY * 0.05));
+                    camera.position.y = isolatedCamY;
+                    controls.target.set(0, isolatedCamY * 0.5, -200);
+                    camera.updateProjectionMatrix();
+                };
+                renderer.domElement.addEventListener('wheel', isolatedWheelHandler, { passive: false });
+
+                // Clear labels during isolation
+                labelElements.forEach(({ el, line }) => { el.style.display = 'none'; line.style.display = 'none'; });
+            } catch (e) {
+                console.error("ISOLATED MODE ERROR", e);
+            }
+        }
+
+        // Compute screen-space bounding box pixel width for each isolated clone,
+        // draw guide lines from screen bottom-center, and position distance labels
+        function updateIsolatedPixelCounts() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            const halfW = w / 2;
+            const halfH = h / 2;
+            const box = new THREE.Box3();
+            const corners = [];
+            for (let i = 0; i < 8; i++) corners.push(new THREE.Vector3());
+
+            // Get or create overlay canvas for guide lines
+            let lineCanvas = document.getElementById('iso-line-canvas');
+            if (!lineCanvas) {
+                lineCanvas = document.createElement('canvas');
+                lineCanvas.id = 'iso-line-canvas';
+                lineCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;';
+                const container = document.getElementById('canvas-container');
+                if (container) container.appendChild(lineCanvas);
+            }
+            lineCanvas.width = w;
+            lineCanvas.height = h;
+            const lineCtx = lineCanvas.getContext('2d');
+            lineCtx.clearRect(0, 0, w, h);
+
+            // Ensure we have HTML labels for pixel widths AND interactive distance labels
+            let pxLabels = document.querySelectorAll('.iso-pixel-label');
+            let distLabels = document.querySelectorAll('.iso-dist-label');
+            if (pxLabels.length !== isolatedCloneData.length) {
+                document.querySelectorAll('.iso-pixel-label').forEach(el => el.remove());
+                document.querySelectorAll('.iso-dist-label').forEach(el => el.remove());
+                const container = document.getElementById('canvas-container');
+                if (!container) return;
+                isolatedCloneData.forEach((data, i) => {
+                    const px = document.createElement('div');
+                    px.className = 'iso-pixel-label';
+                    px.style.cssText = 'position:absolute;color:rgba(255,255,255,0.8);font-size:11px;font-family:Inter,sans-serif;pointer-events:none;text-align:center;white-space:nowrap;transform:translate(-50%,-100%);z-index:10;';
+                    container.appendChild(px);
+
+                    // Size label (above pixel count, draggable to scale)
+                    const sl = document.createElement('div');
+                    sl.className = 'iso-size-label';
+                    sl.dataset.index = i;
+                    sl.style.cssText = 'position:absolute;color:rgba(255,255,255,0.95);font-size:13px;font-weight:bold;font-family:Inter,sans-serif;pointer-events:auto;text-align:center;white-space:nowrap;transform:translate(-50%,-100%);z-index:12;cursor:ew-resize;padding:2px 8px;border:1px solid rgba(255,255,255,0.3);border-radius:3px;background:rgba(0,0,0,0.25);user-select:none;';
+                    sl.textContent = `${data.vesselFeet} ft`;
+                    sl.addEventListener('mousedown', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        scaleDragState = { index: i, startX: e.clientX, startFeet: data.vesselFeet };
+                        document.body.style.cursor = 'ew-resize';
+                    });
+                    container.appendChild(sl);
+
+                    if (data.dist > 0) {
+                        const dl = document.createElement('div');
+                        dl.className = 'iso-dist-label';
+                        dl.dataset.index = i;
+                        dl.style.cssText = 'position:absolute;color:rgba(255,255,255,0.95);font-size:20px;font-weight:bold;font-family:Inter,sans-serif;pointer-events:auto;text-align:center;white-space:nowrap;transform:translate(-50%,-50%);z-index:15;cursor:ns-resize;padding:4px 10px;border:1px solid rgba(255,255,255,0.4);border-radius:4px;background:rgba(0,0,0,0.3);text-shadow:0 1px 3px rgba(0,0,0,0.6);user-select:none;';
+                        dl.textContent = `${data.dist}m`;
+                        // Hover: show/hide 3D arrows
+                        dl.addEventListener('mouseenter', () => {
+                            if (data.distArrows) data.distArrows.visible = true;
+                            dl.style.borderColor = 'rgba(255,255,255,0.8)';
+                            dl.style.background = 'rgba(0,0,0,0.5)';
+                        });
+                        dl.addEventListener('mouseleave', () => {
+                            if (!distDragState) {
+                                if (data.distArrows) data.distArrows.visible = false;
+                                dl.style.borderColor = 'rgba(255,255,255,0.4)';
+                                dl.style.background = 'rgba(0,0,0,0.3)';
+                            }
+                        });
+                        // Drag: mousedown to start
+                        dl.addEventListener('mousedown', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            distDragState = { index: i, startY: e.clientY, startDist: data.dist };
+                            if (data.distArrows) data.distArrows.visible = true;
+                            document.body.style.cursor = 'ns-resize';
+                        });
+                        container.appendChild(dl);
+                    }
+                });
+                pxLabels = document.querySelectorAll('.iso-pixel-label');
+                distLabels = document.querySelectorAll('.iso-dist-label');
+            }
+
+            // Screen bottom center
+            const screenBottomCenterX = halfW;
+            const screenBottomCenterY = h;
+
+            isolatedCloneData.forEach(({ clone, dist }, i) => {
+                const pxLabel = pxLabels[i];
+                if (!pxLabel) return;
+
+                // Compute world-space bounding box of this clone
+                box.setFromObject(clone);
+                if (box.isEmpty()) {
+                    pxLabel.style.display = 'none';
+                    return;
+                }
+
+                // Get the 8 corners of the 3D bounding box
+                const min = box.min, max = box.max;
+                corners[0].set(min.x, min.y, min.z);
+                corners[1].set(min.x, min.y, max.z);
+                corners[2].set(min.x, max.y, min.z);
+                corners[3].set(min.x, max.y, max.z);
+                corners[4].set(max.x, min.y, min.z);
+                corners[5].set(max.x, min.y, max.z);
+                corners[6].set(max.x, max.y, min.z);
+                corners[7].set(max.x, max.y, max.z);
+
+                // Project corners to screen space and find 2D bounding rect
+                let sxMin = Infinity, sxMax = -Infinity, syMin = Infinity, syMax = -Infinity;
+                for (const c of corners) {
+                    c.project(camera);
+                    const sx = (c.x * halfW) + halfW;
+                    const sy = -(c.y * halfH) + halfH;
+                    if (sx < sxMin) sxMin = sx;
+                    if (sx > sxMax) sxMax = sx;
+                    if (sy < syMin) syMin = sy;
+                    if (sy > syMax) syMax = sy;
+                }
+
+                // Compute bounding box width in pixels
+                const pxW = Math.round(Math.max(0, sxMax - sxMin));
+
+                // ── Pixel label: just above the bounding box top ──
+                const bboxCenterX = (sxMin + sxMax) / 2;
+                pxLabel.style.display = 'block';
+                pxLabel.style.left = bboxCenterX + 'px';
+                pxLabel.style.top = (syMin - 2) + 'px'; // just above top edge
+                pxLabel.textContent = `${pxW} px`;
+
+                // ── Size label: above pixel label ──
+                const sizeLabel = document.querySelector(`.iso-size-label[data-index="${i}"]`);
+                if (sizeLabel) {
+                    sizeLabel.style.display = 'block';
+                    sizeLabel.style.left = bboxCenterX + 'px';
+                    sizeLabel.style.top = (syMin - 22) + 'px';
+                    const data = isolatedCloneData[i];
+                    if (data) sizeLabel.textContent = `${Math.round(data.vesselFeet)} ft`;
+                }
+
+                // ── Guide line: screen bottom-center to bbox bottom-center ──
+                const bboxBottomY = syMax; // bottom of bounding box in screen space
+                const bboxBottomX = bboxCenterX;
+
+                lineCtx.beginPath();
+                lineCtx.moveTo(screenBottomCenterX, screenBottomCenterY);
+                lineCtx.lineTo(bboxBottomX, bboxBottomY);
+                lineCtx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+                lineCtx.lineWidth = 2;
+                lineCtx.stroke();
+                // ── Distance label on guide line: midpoint between boat bottom and screen bottom ──
+                if (dist > 0) {
+                    const dlSelector = `.iso-dist-label[data-index="${i}"]`;
+                    const distLabel = document.querySelector(dlSelector);
+                    if (distLabel) {
+                        const midX = (screenBottomCenterX + bboxBottomX) / 2;
+                        const midY = (screenBottomCenterY + bboxBottomY) / 2;
+                        distLabel.style.display = 'block';
+                        distLabel.style.left = midX + 'px';
+                        distLabel.style.top = midY + 'px';
+                        distLabel.textContent = `${Math.round(dist)}m`;
+                    }
+                }
+            });
+        }
+
+        // ── Drag handlers for distance labels ──────────────
+        document.addEventListener('mousemove', (e) => {
+            // Distance drag
+            if (distDragState) {
+                const { index, startY, startDist } = distDragState;
+                const deltaY = startY - e.clientY; // up = positive = further
+                const newDist = Math.max(20, startDist + deltaY * 1.5);
+                const data = isolatedCloneData[index];
+                if (!data) return;
+
+                // Keep the boat on its specific trajectory line by finding its original X/Z ratio
+                // Default dist is basically data.clone.position.z * -1. 
+                // We'll figure out the ratio of X to Z.
+                const originalRatio = data.clone.position.x / Math.abs(data.clone.position.z);
+
+                data.dist = newDist;
+                const xOffset = newDist * originalRatio;
+                data.clone.position.set(xOffset, 0, -newDist);
+                const midX = xOffset / 2;
+                const midZ = -newDist / 2;
+                if (data.distArrows) {
+                    data.distArrows.children[0].position.set(midX, 0.3, midZ - 2);
+                    data.distArrows.children[1].position.set(midX, 0.3, midZ + 2);
+                }
+            }
+            // Rotation drag
+            if (rotateDragState) {
+                const deltaX = e.clientX - rotateDragState.startX;
+                const data = isolatedCloneData[rotateDragState.cloneIndex];
+                if (data) {
+                    data.clone.rotation.y += deltaX * 0.01;
+                }
+                rotateDragState.startX = e.clientX;
+            }
+            // Scale drag
+            if (scaleDragState) {
+                const { index, startX, startFeet } = scaleDragState;
+                const deltaX = e.clientX - startX;
+                isolatedCloneData.forEach(d => {
+                    let newFeet = startFeet + deltaX * 0.3;
+                    newFeet = Math.max(d.origFeet * 0.5, Math.min(d.origFeet * 2.0, newFeet));
+                    const ratio = newFeet / d.origFeet;
+                    d.clone.scale.setScalar(d.origScale * ratio);
+                    d.vesselFeet = Math.round(newFeet * 10) / 10;
+                });
+            }
+        });
+        document.addEventListener('mouseup', () => {
+            if (distDragState) {
+                const data = isolatedCloneData[distDragState.index];
+                if (data && data.distArrows) data.distArrows.visible = false;
+                distDragState = null;
+            }
+            if (rotateDragState) {
+                controls.enabled = true;
+                rotateDragState = null;
+            }
+            if (scaleDragState) {
+                scaleDragState = null;
+            }
+            document.body.style.cursor = '';
+        });
+
+        // ── Boat rotation drag (horizontal drag on clones) ──
+        let _rotationListenerAttached = false;
+        function ensureRotationListener() {
+            if (_rotationListenerAttached || !renderer) return;
+            _rotationListenerAttached = true;
+            renderer.domElement.addEventListener('pointerdown', (e) => {
+                if (!isIsolated) return;
+                if (distDragState || scaleDragState) return;
+
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+
+                const cloneMeshes = [];
+                isolatedCloneData.forEach((data, idx) => {
+                    data.clone.traverse(child => {
+                        if (child.isMesh) {
+                            child.userData._isoCloneIdx = idx;
+                            cloneMeshes.push(child);
+                        }
+                    });
+                });
+                const hits = raycaster.intersectObjects(cloneMeshes, false);
+                if (hits.length > 0) {
+                    const idx = hits[0].object.userData._isoCloneIdx;
+                    rotateDragState = { cloneIndex: idx, startX: e.clientX };
+                    controls.enabled = false;
+                }
+            });
+        }
+
+        function exitIsolatedMode() {
+            isIsolated = false;
+            isolatedGroup.clear();
+            isolatedCloneData = [];
+            // Remove pixel count overlays, distance labels, and line canvas
+            document.querySelectorAll('.iso-pixel-label').forEach(el => el.remove());
+            document.querySelectorAll('.iso-dist-label').forEach(el => el.remove());
+            document.querySelectorAll('.iso-size-label').forEach(el => el.remove());
+            distDragState = null;
+            rotateDragState = null;
+            scaleDragState = null;
+            const lineCanvas = document.getElementById('iso-line-canvas');
+            if (lineCanvas) lineCanvas.remove();
+
+            if (isolatedDirLight) isolatedDirLight.visible = false;
+            if (isolatedAmbientLight) isolatedAmbientLight.visible = false;
+
+            // Remove wheel handler and re-enable orbit controls
+            if (isolatedWheelHandler && renderer) {
+                renderer.domElement.removeEventListener('wheel', isolatedWheelHandler);
+                isolatedWheelHandler = null;
+            }
+            controls.enabled = true;
+
+            // Restore camera
+            camera.fov = originalCameraState.fov;
+            camera.updateProjectionMatrix();
+            camera.position.copy(originalCameraState.pos);
+            controls.target.copy(originalCameraState.target);
+            controls.update();
+
+            // Show parade elements
+            boats.forEach(b => {
+                b.mesh.visible = true;
+                if (b.bbox) b.bbox.visible = showBounds;
+                if (b.plate) b.plate.visible = showPlates;
+            });
+            breadcrumbs.forEach(bc => bc.mesh.visible = true);
+            document.querySelector('.controls-panel').style.display = 'block';
+            document.querySelector('.header').style.display = 'flex';
+            document.querySelector('.info-panel').style.display = 'flex';
+            document.getElementById('isolate-overlay').classList.remove('active');
+            document.getElementById('isolate-fov').style.display = 'none';
+        }
+
+        // ── Model Loading ───────────────────────────────────
+        function loadAllModels() {
+            const loader = new GLTFLoader();
+            let loaded = 0;
+
+            MODEL_FILES.forEach((file, index) => {
+                const row = VESSEL_LAYOUT[index][0];
+                const col = VESSEL_LAYOUT[index][1];
+                const path = `models/${file}`;
+
+                loader.load(
+                    path,
+                    (gltf) => {
+                        const model = gltf.scene;
+                        const vesselName = FRIENDLY_NAMES[index];
+
+                        // Per-vessel sizing based on realistic relative scale
+                        const targetSize = VESSEL_SCALES[vesselName] || 8;
+                        const box = new THREE.Box3().setFromObject(model);
+                        const size = new THREE.Vector3();
+                        box.getSize(size);
+                        const maxDim = Math.max(size.x, size.y, size.z);
+                        const scaleFactor = targetSize / maxDim;
+                        model.scale.setScalar(scaleFactor);
+
+                        // Center the model horizontally
+                        box.setFromObject(model);
+                        const center = new THREE.Vector3();
+                        box.getCenter(center);
+                        model.position.x -= center.x;
+                        model.position.z -= center.z;
+
+                        // Snap bottom to water level
+                        box.setFromObject(model);
+                        model.position.y -= box.min.y;
+                        // Per-vessel waterline offset (positive = higher above water)
+                        const waterlineOffset = {
+                            'Center Console 30': 0.5,
+                            'Center Console 45': 0.5,
+                            'Powerboat 20': 0.4,
+                            'Sailboat (M)': 0.5,
+                            'Kayak': 0.3,
+                            'Jet Skis': 0.3,
+                        };
+                        const sinkAmount = 0.3 - (waterlineOffset[vesselName] || 0);
+                        model.position.y -= sinkAmount;
+
+                        // Compute tight bounding box BEFORE rotation (axis-aligned to model)
+                        const tightBox = new THREE.Box3().setFromObject(model);
+                        const bboxSize = new THREE.Vector3();
+                        const bboxCenter = new THREE.Vector3();
+                        tightBox.getSize(bboxSize);
+                        tightBox.getCenter(bboxCenter);
+                        // Per-vessel tightness factor (1.0 = exact fit, <1 = tighter, >1 = roomier)
+                        const tightFit = {
+                            'Ferry': 0.82, 'Cruise Ship': 0.82, 'Tanker': 0.82,
+                            'Jet Skis': 1.0, 'Kayak': 1.0,
+                            'Sailboat (S)': 1.1, 'Sailboat (M)': 1.1, 'Sailboat (L)': 1.1, 'Super Sail': 1.1,
+                        };
+                        const shrink = tightFit[vesselName] || 0.92;
+                        bboxSize.multiplyScalar(shrink);
+
+                        // Rotate model to face forward (90° right)
+                        model.rotation.y = Math.PI / 2;
+
+                        // Enable shadows and apply white material
+                        const boatMaterial = new THREE.MeshStandardMaterial({
+                            color: 0xffffff, // White
+                            roughness: 0.5,  // Slightly matte
+                            metalness: 0.2,  // Slight reflectivity
+                        });
+
+                        model.traverse((child) => {
+                            if (child.isMesh) {
+                                child.castShadow = false;
+                                child.receiveShadow = false;
+                                child.material = boatMaterial;
+
+                                // Hide flat ground-plane meshes baked into GLB models
+                                // Check by name first (most reliable)
+                                const n = (child.name || '').toLowerCase();
+                                if (n.includes('plane') || n.includes('ground') || n.includes('floor') ||
+                                    n.includes('shadow') || n.includes('glow') || n.includes('surface')) {
+                                    child.visible = false;
+                                    return; // skip geometry checks
+                                }
+
+                                // Check by geometry: hide any mesh with zero or near-zero height
+                                if (child.geometry) {
+                                    child.geometry.computeBoundingBox();
+                                    const gBox = child.geometry.boundingBox;
+                                    if (gBox) {
+                                        const gSize = new THREE.Vector3();
+                                        gBox.getSize(gSize);
+                                        const footprint = Math.max(gSize.x, gSize.z);
+                                        // Hide if height is zero or near-zero
+                                        if (gSize.y < 0.001 && footprint > 0.01) {
+                                            child.visible = false;
+                                            return;
+                                        }
+                                        // Hide if extremely flat (height < 5% of footprint)
+                                        if (footprint > 0.01 && gSize.y < footprint * 0.05) {
+                                            child.visible = false;
+                                            return;
+                                        }
+                                    }
+                                    // Hide meshes with ≤4 vertices (quads)
+                                    const posAttr = child.geometry.getAttribute('position');
+                                    if (posAttr && posAttr.count <= 4) {
+                                        child.visible = false;
+                                    }
+                                }
+                            }
+                        });
+
+                        // Wrap in a group for positioning & animation
+                        const boatGroup = new THREE.Group();
+                        boatGroup.add(model);
+                        scene.add(boatGroup);
+
+                        // Bounding box: full glass cuboid with thin white edges
+                        const bboxGroup = new THREE.Group();
+                        bboxGroup.name = "BoundingBox";
+
+                        const boxGeometry = new THREE.BoxGeometry(bboxSize.x, bboxSize.y, bboxSize.z);
+                        const edgesGeometry = new THREE.EdgesGeometry(boxGeometry);
+
+                        // White glass textured material — wireframe only (no solid faces to avoid visible squares on water)
+                        const lineMat = new THREE.LineBasicMaterial({
+                            color: 0xffffff,
+                            transparent: true,
+                            opacity: 0.6,
+                            depthWrite: false
+                        });
+
+                        const wireframe = new THREE.LineSegments(edgesGeometry, lineMat);
+
+                        bboxGroup.add(wireframe);
+
+
+
+                        // Position bbox at model center
+                        bboxGroup.position.set(bboxCenter.x, bboxCenter.y, bboxCenter.z);
+                        bboxGroup.rotation.y = Math.PI / 2;
+                        bboxGroup.visible = showBounds;
+                        boatGroup.add(bboxGroup);
+
+                        const vesselFeet = Math.round((VESSEL_SCALES[vesselName] || 8) * 3.28084);
+                        // bboxSize.x = length (model local X → boatGroup -Z after π/2 rotation)
+                        // bboxSize.z = beam  (model local Z → boatGroup +X after π/2 rotation)
+                        const halfBeam = bboxSize.z / 2;
+
+                        // Anchor parented to bboxGroup so it is geometrically locked to its side face.
+                        // bboxGroup.rotation.y = π/2, so bboxGroup local +Z → boatGroup/world +X (starboard).
+                        // Placing the anchor at local (0, h, halfSide) puts it exactly on the visible side face.
+                        const lengthAnchor = new THREE.Object3D();
+                        lengthAnchor.position.set(0, bboxSize.y * 0.3, halfBeam + 0.5);
+                        bboxGroup.add(lengthAnchor); // child of bboxGroup, not boatGroup
+
+                        const boatData = {
+                            mesh: boatGroup,
+                            name: `${vesselName} — ${vesselFeet} ft`,
+                            vesselFeet,
+                            phase: Math.random() * Math.PI * 2,
+                            rollPhase: Math.random() * Math.PI * 2,
+                            gridRow: row,
+                            gridCol: col,
+                            index: index,
+                            bbox: bboxGroup,
+                            halfLength: bboxSize.x / 2,  // half-length along movement axis
+                            halfWidth: halfBeam,
+                        };
+                        // Circular transparent plate at waterline
+                        const plate = createPlate(bboxSize);
+                        plate.name = "WaterPlate";
+                        plate.visible = showPlates;
+                        boatGroup.add(plate);
+                        boatData.plate = plate;
+
+                        boatData.arrow = plate.getObjectByName('HeadingArrow');
+                        if (boatData.arrow) boatData.arrow.visible = showArrows;
+                        boats.push(boatData);
+
+                        // Position on grid
+                        positionBoat(boatData);
+
+                        // Create labels
+                        createLabel(boatData);
+
+                        // Update loading
+                        loaded++;
+                        document.getElementById('loading-progress').textContent = `${loaded} / ${MODEL_FILES.length}`;
+                        document.getElementById('boat-count').textContent = `Vessels: ${loaded}/${MODEL_FILES.length}`;
+
+                        if (loaded === MODEL_FILES.length) {
+                            // All loaded — hide overlay
+                            setTimeout(() => {
+                                document.getElementById('loading-overlay').classList.add('hidden');
+                            }, 400);
+                        }
+                    },
+                    undefined,
+                    (error) => {
+                        console.error(`Failed to load ${file}:`, error);
+                        loaded++;
+                        document.getElementById('loading-progress').textContent = `${loaded} / ${MODEL_FILES.length}`;
+                        if (loaded === MODEL_FILES.length) {
+                            setTimeout(() => {
+                                document.getElementById('loading-overlay').classList.add('hidden');
+                            }, 400);
+                        }
+                    }
+                );
+            });
+        }
+
+        // ── Plate ───────────────────────────────────────────
+        function createPlate(bboxSize) {
+            // Radius = exactly half the longer horizontal dimension (fits bounding box)
+            const radius = Math.max(bboxSize.x, bboxSize.z) * 0.5;
+            const segments = 64;
+
+            // Solid disc (slightly below boat bottom so it sits on the waterline)
+            const discGeo = new THREE.CircleGeometry(radius, segments);
+            const discMat = new THREE.MeshBasicMaterial({
+                color: 0x80c8ff,
+                transparent: true,
+                opacity: 0.20,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+            });
+            const disc = new THREE.Mesh(discGeo, discMat);
+            disc.rotation.x = -Math.PI / 2;
+            disc.position.y = 0.05; // just above water surface
+
+            const group = new THREE.Group();
+            group.add(disc);
+
+            // Forward-pointing triangular wedge
+            const wedgeWidth = radius * 0.3;
+            // Place it near the outer edge
+            const pts = new Float32Array([
+                0, 0, -radius * 0.95, // Tip (forward is -Z)
+                wedgeWidth / 2, 0, -radius * 0.6,
+                -wedgeWidth / 2, 0, -radius * 0.6
+            ]);
+            const wedgeGeo = new THREE.BufferGeometry();
+            wedgeGeo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+            const wedgeMat = new THREE.MeshBasicMaterial({
+                color: 0x00ffff,
+                transparent: true,
+                opacity: 0.5,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+            });
+            const wedge = new THREE.Mesh(wedgeGeo, wedgeMat);
+            wedge.position.y = 0.052; // barely above plate
+            wedge.name = "HeadingArrow";
+            group.add(wedge);
+
+            return group;
+        }
+
+        // ── Grid Positioning ────────────────────────────────
+        function positionBoat(boat) {
+            const totalWidth = (GRID_COLS - 1) * gridSpacing;
+            const totalDepth = (GRID_ROWS - 1) * gridSpacing;
+            const x = boat.gridCol * gridSpacing - totalWidth / 2;
+            const z = boat.gridRow * gridSpacing - totalDepth / 2;
+            boat.mesh.position.x = x;
+            // Offset Z so fronts align: push back by half vessel length
+            boat.mesh.position.z = z + (boat.halfLength || 0);
+        }
+
+        function repositionBoats() {
+            boats.forEach(boat => positionBoat(boat));
+        }
+
+        // ── Labels ──────────────────────────────────────────
+
+        function createLabel(boat) {
+            const label = document.createElement('div');
+            label.className = 'vessel-label';
+            label.textContent = boat.name;
+            labelsContainer.appendChild(label);
+
+            // Create SVG curved leader line (kite string)
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('stroke', 'rgba(148, 163, 184, 0.35)');
+            path.setAttribute('stroke-width', '1');
+            path.setAttribute('fill', 'none');
+            leaderSvg.appendChild(path);
+
+            labelElements.push({ el: label, boat: boat, line: path });
+        }
+
+        function updateLabels() {
+            const halfW = window.innerWidth / 2;
+            const halfH = window.innerHeight / 2;
+
+            labelElements.forEach(({ el, boat, line }) => {
+                // Label position — offset behind the boat (trailing like a kite)
+                const sternOffset = boat.halfLength || 4;
+                const labelHeight = Math.max(6, sternOffset * 0.8);
+                const labelPos = new THREE.Vector3(
+                    boat.mesh.position.x,
+                    boat.mesh.position.y + labelHeight,
+                    boat.mesh.position.z + sternOffset + 4
+                );
+                labelPos.project(camera);
+
+                // Stern attachment point (back of the bounding box)
+                const boatTopPos = new THREE.Vector3(
+                    boat.mesh.position.x,
+                    boat.mesh.position.y + 2,
+                    boat.mesh.position.z + sternOffset
+                );
+                boatTopPos.project(camera);
+
+                // Check if behind camera
+                if (labelPos.z > 1) {
+                    el.style.display = 'none';
+                    line.style.display = 'none';
+                    return;
+                }
+
+                const lx = (labelPos.x * halfW) + halfW;
+                const ly = -(labelPos.y * halfH) + halfH;
+                const bx = (boatTopPos.x * halfW) + halfW;
+                const by = -(boatTopPos.y * halfH) + halfH;
+
+                el.style.display = 'block';
+                el.style.left = lx + 'px';
+                el.style.top = ly + 'px';
+
+                // Curved kite-string: quadratic bezier with sag
+                const midX = (lx + bx) / 2;
+                const midY = Math.max(ly, by) + 15; // sag downward
+                const d = `M ${bx} ${by} Q ${midX} ${midY} ${lx} ${ly + 6}`;
+
+                line.style.display = 'block';
+                line.setAttribute('d', d);
+            });
+        }
+
+        // ── Animation ───────────────────────────────────────
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = clock.getDelta();
+            const elapsed = clock.getElapsedTime();
+
+            // Update water
+            if (water && water.material.uniforms['time']) {
+                water.material.uniforms['time'].value += dt;
+            }
+
+            // Parade forward movement (knots → m/s ≈ × 0.5144)
+            const speedMs = paradeSpeed * 0.5144;
+            if (!isIsolated) {
+                paradeOffset += speedMs * dt;
+            }
+
+            // Animate boats
+            boats.forEach((boat) => {
+                if (!isIsolated) {
+                    // Forward movement (all boats advance together in -Z)
+                    const totalDepth = (GRID_ROWS - 1) * gridSpacing;
+                    const baseZ = boat.gridRow * gridSpacing - totalDepth / 2;
+                    boat.mesh.position.z = baseZ + (boat.halfLength || 0) - paradeOffset;
+
+                    // Bobbing (Y axis) — gentle, always above water
+                    const bobFreq = 0.6;
+                    const bob = 0.4 + Math.sin(elapsed * bobFreq * Math.PI * 2 + boat.phase) * 0.15 * waveHeight;
+                    boat.mesh.position.y = bob;
+
+                    // Roll (slight tilt side to side)
+                    const rollFreq = 0.45;
+                    const roll = Math.sin(elapsed * rollFreq * Math.PI * 2 + boat.rollPhase) * 0.02 * waveHeight;
+                    boat.mesh.rotation.z = roll;
+
+                    // Pitch (slight fore/aft)
+                    const pitchFreq = 0.35;
+                    const pitch = Math.sin(elapsed * pitchFreq * Math.PI * 2 + boat.phase + 1.0) * 0.012 * waveHeight;
+                    boat.mesh.rotation.x = pitch;
+                }
+
+                // Lazy Susan spin
+                if (showPlates && !isIsolated) {
+                    boat.spinY = (boat.spinY || 0) + dt * 0.5;
+                    boat.mesh.rotation.y = boat.spinY;
+                }
+            });
+
+            // Always spin clones in isolated view (regardless of Spinning Plates checkbox)
+            if (isIsolated && isolatedGroup && isolatedCloneData.length > 0) {
+                // Slower rotation for very large vessels (e.g., > 200ft)
+                const isLarge = isolatedCloneData[0].vesselFeet > 200;
+                const spinRate = isLarge ? 0.15 : 0.3;
+                const spinAngle = elapsed * spinRate; // continuous rotation based on elapsed time
+                isolatedGroup.children.forEach(child => {
+                    // Only spin boat group clones, skip distance label sprites
+                    if (child.isSprite) return;
+                    child.rotation.y = spinAngle;
+                });
+
+                // Update pixel count labels for each clone
+                updateIsolatedPixelCounts();
+            }
+
+            // Drop breadcrumb trail dots (exactly every 1 second)
+            const currentSec = Math.floor(elapsed);
+            if (!isIsolated && currentSec > lastBreadcrumbSec && paradeSpeed > 0.1) {
+                lastBreadcrumbSec = currentSec;
+                boats.forEach((boat) => {
+                    // Sailboats get subtler wakes
+                    const isSail = boat.name.includes('Sail') || boat.name.includes('Super Sail') || boat.name.includes('Kayak');
+                    const dotSize = isSail ? 0.06 : 0.25;
+                    const dotOpacity = isSail ? 0.3 : 0.8;
+                    const crumbGeo = new THREE.SphereGeometry(dotSize, 8, 8);
+                    const crumbMat = new THREE.MeshBasicMaterial({
+                        color: 0xffffff,
+                        transparent: true,
+                        opacity: dotOpacity,
+                    });
+                    const crumb = new THREE.Mesh(crumbGeo, crumbMat);
+                    crumb.position.set(
+                        boat.mesh.position.x,
+                        0.12,  // just above water
+                        boat.mesh.position.z
+                    );
+                    scene.add(crumb);
+                    breadcrumbs.push({ mesh: crumb, birthTime: elapsed });
+                });
+            }
+
+            // Grow wider and fade breadcrumbs over 10 seconds
+            for (let i = breadcrumbs.length - 1; i >= 0; i--) {
+                const bc = breadcrumbs[i];
+                const age = elapsed - bc.birthTime;
+                // Get wider with age
+                const scale = 1.0 + age * 0.5;
+                bc.mesh.scale.setScalar(scale);
+                // Linear fade over 7 seconds
+                bc.mesh.material.opacity = 0.8 * Math.max(0, 1 - age / 7);
+                if (age > 7) {
+                    scene.remove(bc.mesh);
+                    bc.mesh.geometry.dispose();
+                    bc.mesh.material.dispose();
+                    breadcrumbs.splice(i, 1);
+                }
+            }
+
+            // Update camera target to follow the parade (only if not isolated)
+            if (!isIsolated && boats.length > 0) {
+                // Track the center of the fleet
+                const centerZ = 0;
+                controls.target.z = centerZ - paradeOffset;
+                camera.position.z = centerZ - 50 - paradeOffset;
+            }
+
+            // Update spotlight target to look where camera is looking
+            if (window.headLight && window.headLightTarget) {
+                const vector = new THREE.Vector3(0, 0, -1);
+                vector.applyQuaternion(camera.quaternion);
+                window.headLightTarget.position.copy(camera.position).add(vector);
+            }
+
+            controls.update();
+            if (!isIsolated) {
+                updateLabels();
+            }
+            // Enforce minimum camera height of 2m
+            if (camera.position.y < 2) camera.position.y = 2;
+            // Update camera height readout
+            const camEl = document.getElementById('cam-height');
+            if (camEl) camEl.textContent = `Camera Height: ${camera.position.y.toFixed(1)}m`;
+            renderer.render(scene, camera);
+        }
+
+        // ── Resize ──────────────────────────────────────────
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            if (isIsolated) {
+                camera.fov = getVFOV(55, camera.aspect);
+            }
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // ── Start ───────────────────────────────────────────
+        init();
+    </script>
+</body>
+
+</html>

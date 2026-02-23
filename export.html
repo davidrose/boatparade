@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>LOOKOUT 3D Boat Exporter</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #0a0e1a;
+            color: white;
+            padding: 20px;
+        }
+
+        #status {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .log {
+            font-family: monospace;
+            font-size: 14px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="status">Preparing to Export...</div>
+    <div id="log" class="log"></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+        const MODEL_FILES = [
+            'AIS_JetSkis-A_001.glb', 'AIS_Kayak-A_001.glb', 'AIS-BOAT_CenterConsole_A_001.glb', 'AIS-BOAT_CenterConsole_B_001.glb',
+            'AIS_Sailboat-Small-A_001.glb', 'AIS_Sailboat-Medium-A_001.glb', 'AIS_Sailboat-Large-A_001.glb', 'AIS_Sailboat-SuperSail-A_001.glb',
+            'AIS_Powerboat-A_001.glb', 'AIS_FishingBoat-A_001.glb', 'AIS_Yacht-A_001.glb',
+            'AIS_Ferry-A_001.glb', 'AIS_Military-A_001.glb', 'AIS_Tug-A_001.glb',
+            'AIS_Tanker-A_001.glb', 'AIS_CruiseShip-A_001.glb',
+        ];
+
+        const FRIENDLY_NAMES = [
+            'Jet Skis', 'Kayak', 'Center Console A', 'Center Console B',
+            'Sailboat (S)', 'Sailboat (M)', 'Sailboat (L)', 'Super Sail',
+            'Powerboat', 'Fishing Boat', 'Yacht',
+            'Ferry', 'Military Cutter', 'Tug',
+            'Tanker', 'Cruise Ship',
+        ];
+
+        const VESSEL_SCALES = {
+            'Center Console A': 9.14, 'Center Console B': 13.7, 'Cruise Ship': 304.8, 'Ferry': 100.6,
+            'Fishing Boat': 15.2, 'Jet Skis': 3, 'Kayak': 3.05, 'Military Cutter': 100.6,
+            'Powerboat': 6.1, 'Sailboat (L)': 12.2, 'Sailboat (M)': 7.6, 'Sailboat (S)': 4.6,
+            'Super Sail': 27.4, 'Tanker': 304.8, 'Tug': 24.4, 'Yacht': 18.3,
+        };
+
+        function createPlate(bboxSize) {
+            const radius = Math.max(bboxSize.x, bboxSize.z) * 0.5;
+            const segments = 64;
+
+            const discGeo = new THREE.CircleGeometry(radius, segments);
+            const discMat = new THREE.MeshBasicMaterial({
+                color: 0x80c8ff,
+                transparent: true,
+                opacity: 0.20,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+            });
+            const disc = new THREE.Mesh(discGeo, discMat);
+            disc.rotation.x = -Math.PI / 2;
+            disc.position.y = 0.05;
+
+            const group = new THREE.Group();
+            group.add(disc);
+
+            const wedgeWidth = radius * 0.3;
+            const pts = new Float32Array([
+                0, 0, -radius * 0.95,
+                wedgeWidth/2, 0, -radius * 0.6,
+                -wedgeWidth/2, 0, -radius * 0.6
+            ]);
+            const wedgeGeo = new THREE.BufferGeometry();
+            wedgeGeo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+            const wedgeMat = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.8,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+            });
+            const wedge = new THREE.Mesh(wedgeGeo, wedgeMat);
+            wedge.position.y = 0.052;
+            wedge.name = "HeadingArrow";
+            group.add(wedge);
+
+            return group;
+        }
+
+        const loader = new GLTFLoader();
+        const exporter = new GLTFExporter();
+        let index = 0;
+        const statusEl = document.getElementById('status');
+        const logEl = document.getElementById('log');
+
+        function logInfo(msg) {
+            const div = document.createElement('div');
+            div.textContent = msg;
+            logEl.appendChild(div);
+            console.log(msg);
+        }
+
+        function exportNext() {
+            if (index >= MODEL_FILES.length) {
+                statusEl.textContent = "Finished! All 16 models exported successfully.";
+                return;
+            }
+
+            const file = MODEL_FILES[index];
+            const vesselName = FRIENDLY_NAMES[index];
+            statusEl.textContent = \`Exporting \${index + 1}/16: \${file}\`;
+            logInfo(\`Loading \${file}...\`);
+
+            loader.load(\`models/\${file}\`, (gltf) => {
+                const model = gltf.scene;
+
+                const targetSize = VESSEL_SCALES[vesselName] || 8;
+                const box = new THREE.Box3().setFromObject(model);
+                const size = new THREE.Vector3();
+                box.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scaleFactor = targetSize / maxDim;
+                model.scale.setScalar(scaleFactor);
+
+                box.setFromObject(model);
+                const center = new THREE.Vector3();
+                box.getCenter(center);
+                model.position.x -= center.x;
+                model.position.z -= center.z;
+
+                box.setFromObject(model);
+                model.position.y -= box.min.y;
+                
+                const waterlineOffset = {
+                    'Center Console A': 0.5,
+                    'Center Console B': 0.5,
+                    'Powerboat': 0.4,
+                    'Sailboat (M)': 0.5,
+                    'Kayak': 0.3,
+                    'Jet Skis': 0.3,
+                };
+                const sinkAmount = 0.3 - (waterlineOffset[vesselName] || 0);
+                model.position.y -= sinkAmount;
+
+                const tightBox = new THREE.Box3().setFromObject(model);
+                const bboxSize = new THREE.Vector3();
+                const bboxCenter = new THREE.Vector3();
+                tightBox.getSize(bboxSize);
+                tightBox.getCenter(bboxCenter);
+                
+                const tightFit = {
+                    'Ferry': 0.82, 'Cruise Ship': 0.82, 'Tanker': 0.82,
+                    'Jet Skis': 1.0, 'Kayak': 1.0,
+                    'Sailboat (S)': 1.1, 'Sailboat (M)': 1.1, 'Sailboat (L)': 1.1, 'Super Sail': 1.1,
+                };
+                const shrink = tightFit[vesselName] || 0.92;
+                bboxSize.multiplyScalar(shrink);
+
+                model.rotation.y = Math.PI / 2;
+
+                const boatMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    roughness: 0.5,
+                    metalness: 0.2,
+                });
+
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = false;
+                        child.receiveShadow = false;
+                        child.material = boatMaterial;
+
+                        const n = (child.name || '').toLowerCase();
+                        if (n.includes('plane') || n.includes('ground') || n.includes('floor') ||
+                            n.includes('shadow') || n.includes('glow') || n.includes('surface')) {
+                            child.visible = false;
+                            return;
+                        }
+
+                        if (child.geometry) {
+                            child.geometry.computeBoundingBox();
+                            const gBox = child.geometry.boundingBox;
+                            if (gBox) {
+                                const gSize = new THREE.Vector3();
+                                gBox.getSize(gSize);
+                                const footprint = Math.max(gSize.x, gSize.z);
+                                if (gSize.y < 0.001 && footprint > 0.01) {
+                                    child.visible = false;
+                                    return;
+                                }
+                                if (footprint > 0.01 && gSize.y < footprint * 0.05) {
+                                    child.visible = false;
+                                    return;
+                                }
+                            }
+                            const posAttr = child.geometry.getAttribute('position');
+                            if (posAttr && posAttr.count <= 4) {
+                                child.visible = false;
+                            }
+                        }
+                    }
+                });
+
+                const boatGroup = new THREE.Group();
+                boatGroup.add(model);
+
+                const bboxGroup = new THREE.Group();
+                bboxGroup.name = "BoundingBox";
+
+                const boxGeometry = new THREE.BoxGeometry(bboxSize.x, bboxSize.y, bboxSize.z);
+                const edgesGeometry = new THREE.EdgesGeometry(boxGeometry);
+
+                const lineMat = new THREE.LineBasicMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.6,
+                    depthWrite: false
+                });
+
+                const wireframe = new THREE.LineSegments(edgesGeometry, lineMat);
+                bboxGroup.add(wireframe);
+
+                bboxGroup.position.set(bboxCenter.x, bboxCenter.y, bboxCenter.z);
+                bboxGroup.rotation.y = Math.PI / 2;
+                boatGroup.add(bboxGroup);
+
+                const plate = createPlate(bboxSize);
+                plate.name = "WaterPlate";
+                boatGroup.add(plate);
+
+                // Add to export root
+                const exportGroup = new THREE.Group();
+                exportGroup.name = \`Exported_\${vesselName.replace(/[^a-zA-Z0-9]/g, '')}\`;
+                exportGroup.add(boatGroup);
+
+                logInfo(\`Parsing GLTF for \${file}...\`);
+                exporter.parse(exportGroup, (glb) => {
+                    logInfo(\`Sending POST for \${file}...\`);
+                    const blob = new Blob([glb], { type: 'application/octet-stream' });
+                    const outName = \`\${vesselName.replace(/[^a-zA-Z0-9]/g, '')}.glb\`;
+
+                    fetch(\`http://localhost:8766/\${outName}\`, {
+                        method: 'POST',
+                        body: blob
+                    }).then(res => {
+                        if (res.ok) {
+                            logInfo(\`Successfully saved \${outName}\`);
+                            index++;
+                            exportNext();
+                        } else {
+                            logInfo(\`Failed to save \${outName}, status: \${res.status}\`);
+                        }
+                    }).catch(err => {
+                        logInfo(\`Error posting \${outName}: \${err}\`);
+                    });
+                }, (error) => {
+                    logInfo(\`Export error: \${error}\`);
+                }, { binary: true });
+            }, undefined, (error) => {
+                logInfo(\`Load error for \${file}: \${error}\`);
+            });
+        }
+
+        logInfo("Starting export sequence...");
+        exportNext();
+    </script>
+</body>
+
+</html>
