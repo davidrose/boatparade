@@ -426,10 +426,7 @@
                     <input type="checkbox" id="cb-plates" style="accent-color: #3b82f6; cursor: pointer;" checked>
                     <label for="cb-plates" style="cursor: pointer; margin: 0;">Spinning Plates</label>
                 </div>
-                <div class="control-group" style="flex-direction: row; align-items: center; gap: 8px; margin-top: 4px;">
-                    <input type="checkbox" id="cb-spotlight" style="accent-color: #3b82f6; cursor: pointer;" checked>
-                    <label for="cb-spotlight" style="cursor: pointer; margin: 0;">Camera Headlight</label>
-                </div>
+
                 <div class="control-group" style="margin-top: 4px;">
                     <label>HFOV: <span id="hfov-val">55</span>°</label>
                     <input type="range" id="hfov-slider" min="20" max="120" step="1" value="55">
@@ -632,6 +629,12 @@
             scene.background = new THREE.Color(0x8899aa);
             sun.set(0.3, 0.8, 0.4).normalize();
 
+            // Generate environment map for translucent materials
+            const pmremGenerator = new THREE.PMREMGenerator(renderer);
+            pmremGenerator.compileEquirectangularShader();
+            scene.environment = pmremGenerator.fromScene(new THREE.Scene()).texture;
+            pmremGenerator.dispose();
+
             // Water
             const waterGeometry = new THREE.PlaneGeometry(20000, 20000);
             water = new Water(waterGeometry, {
@@ -803,11 +806,7 @@
                     if (boat.arrow) boat.arrow.visible = showArrows;
                 });
             });
-            document.getElementById('cb-spotlight').addEventListener('change', (e) => {
-                if (window.headLight) {
-                    window.headLight.visible = e.target.checked;
-                }
-            });
+
 
             document.getElementById('dir-light-slider').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
@@ -961,7 +960,7 @@
 
                     // Spread left-to-right: closest boat on left, farthest on right
                     const midDist = (distances[0] + distances[distances.length - 1]) / 2;
-                    const rightOffset = (dist - midDist) * 0.5;
+                    const rightOffset = (dist - midDist) * 0.3;
                     clone.position.set(rightOffset, 0, -dist);
 
                     // Make sure rotation is standard (facing camera -> +Z)
@@ -1532,11 +1531,17 @@
                         // Rotate model to face forward (90° right)
                         model.rotation.y = Math.PI / 2;
 
-                        // Enable shadows and apply white material
-                        const boatMaterial = new THREE.MeshStandardMaterial({
-                            color: 0xffffff, // White
-                            roughness: 0.5,  // Slightly matte
-                            metalness: 0.2,  // Slight reflectivity
+                        // Enable shadows and apply translucent material
+                        const boatMaterial = new THREE.MeshPhysicalMaterial({
+                            color: 0xe8f0ff,        // Slight cool blue-white
+                            roughness: 0.25,         // Smooth, polished
+                            metalness: 0.05,         // Barely metallic
+                            transmission: 0.35,      // Translucent (frosted glass)
+                            thickness: 1.5,          // Refraction depth
+                            ior: 1.4,                // Index of refraction
+                            clearcoat: 0.3,          // Subtle clear coat shine
+                            clearcoatRoughness: 0.2,
+                            envMapIntensity: 1.0,    // Pick up environment lighting
                         });
 
                         model.traverse((child) => {
@@ -1734,8 +1739,11 @@
         function positionBoat(boat) {
             const totalWidth = (GRID_COLS - 1) * gridSpacing;
             const totalDepth = (GRID_ROWS - 1) * gridSpacing;
-            const x = boat.gridCol * gridSpacing - totalWidth / 2;
-            const z = boat.gridRow * gridSpacing - totalDepth / 2;
+            // Extra spacing for large vessels to prevent clipping during rotation
+            const sizeBonus = boat.vesselFeet > 100 ? (boat.vesselFeet - 100) * 0.15 : 0;
+            const effectiveSpacing = gridSpacing + sizeBonus;
+            const x = boat.gridCol * effectiveSpacing - totalWidth / 2;
+            const z = boat.gridRow * effectiveSpacing - totalDepth / 2;
             boat.mesh.position.x = x;
             // Offset Z so fronts align: push back by half vessel length
             boat.mesh.position.z = z + (boat.halfLength || 0);
@@ -1854,10 +1862,22 @@
                     boat.mesh.rotation.x = pitch;
                 }
 
-                // Lazy Susan spin
+                // Lazy Susan spin — slower for larger vessels
                 if (showPlates && !isIsolated) {
-                    boat.spinY = (boat.spinY || 0) + dt * 0.5;
+                    // Scale spin rate inversely with vessel size: small boats fast, big boats slow
+                    const sizeFactor = Math.max(0.1, 1.0 - (boat.vesselFeet - 30) / 400);
+                    boat.spinY = (boat.spinY || 0) + dt * 0.5 * sizeFactor;
                     boat.mesh.rotation.y = boat.spinY;
+
+                    // Keep plates flat on water (cancel roll/pitch from parent)
+                    if (boat.plate) {
+                        boat.plate.rotation.x = -boat.mesh.rotation.x;
+                        boat.plate.rotation.z = -boat.mesh.rotation.z;
+                    }
+                    if (boat.bbox) {
+                        boat.bbox.rotation.x = -boat.mesh.rotation.x;
+                        boat.bbox.rotation.z = -boat.mesh.rotation.z;
+                    }
                 }
             });
 
