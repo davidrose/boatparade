@@ -80,10 +80,11 @@
 
         .boat-card.expanded {
             position: fixed;
-            top: 50%;
-            left: 50%;
-            width: min(560px, 92vw);
-            height: min(520px, 85vh);
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            transform: none;
             z-index: 200;
             border: none;
             background: transparent;
@@ -95,17 +96,17 @@
         @keyframes fadeDropIn {
             0% {
                 opacity: 0;
-                transform: translate(-50%, -55%) scale(0.95);
+                transform: scale(0.95);
             }
 
             100% {
                 opacity: 1;
-                transform: translate(-50%, -50%) scale(1);
+                transform: scale(1);
             }
         }
 
         .boat-card.expanded:hover {
-            transform: translate(-50%, -50%);
+            transform: none;
             box-shadow: none;
             border: none;
             background: transparent;
