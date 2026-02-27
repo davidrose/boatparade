@@ -343,6 +343,11 @@
 
         const motorBoats = BOATS.filter(b => b.type === 'motor');
         const sailBoats = BOATS.filter(b => b.type === 'sail');
+
+        // Pre-assign numbers: motorboats 1..N, then sailboats N+1..total
+        motorBoats.forEach((b, i) => { b.num = i + 1; });
+        sailBoats.forEach((b, i) => { b.num = motorBoats.length + i + 1; });
+
         const maxRows = Math.max(motorBoats.length, sailBoats.length);
         const rows = [];
         for (let i = 0; i < maxRows; i++) {
@@ -352,7 +357,6 @@
         const grid = document.getElementById('palette-grid');
         const cardData = []; // { container, renderer, scene, camera, modelGroup, boat, card }
         const loader = new GLTFLoader();
-        let globalNum = 0;
 
         rows.forEach(row => {
             createCard(row.motor, 'motor');
@@ -372,8 +376,7 @@
                 return;
             }
 
-            globalNum++;
-            const num = globalNum;
+            const num = boat.num;
 
             card.innerHTML = `
                 <div class="card-num" data-idx="${num}">${num}</div>
