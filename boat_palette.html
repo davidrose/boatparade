@@ -83,25 +83,44 @@
             position: fixed;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%);
             width: min(420px, 90vw);
             height: min(480px, 80vh);
             z-index: 200;
-            border-color: #555;
-            box-shadow: 0 0 80px rgba(0, 0, 0, 0.8);
+            border: none;
+            background: transparent;
+            box-shadow: none;
             cursor: default;
+            animation: expandIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        @keyframes expandIn {
+            0% {
+                opacity: 0.7;
+                transform: translate(-50%, -50%) scale(0.6);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
         }
 
         .boat-card.expanded:hover {
             transform: translate(-50%, -50%);
-            box-shadow: 0 0 80px rgba(0, 0, 0, 0.8);
+            box-shadow: none;
+            border: none;
+            background: transparent;
         }
 
         .boat-card.expanded .card-3d {
-            height: calc(100% - 36px);
+            height: 100%;
         }
 
         .boat-card.expanded .card-num {
+            display: none;
+        }
+
+        .boat-card.expanded .card-info {
             display: none;
         }
 
@@ -467,21 +486,21 @@
                 model.add(boxLine);
                 entry.boxLine = boxLine;
 
-                // Heading arrow — white, smaller, pointing along +X (front of boat)
+                // Heading arrow — white, smaller, pointing along +Z (front of boat)
                 const arrowLen = 0.8;
                 const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
                 const shaft = new THREE.Mesh(
                     new THREE.CylinderGeometry(0.015, 0.015, arrowLen, 8), arrowMat
                 );
-                shaft.rotation.z = -Math.PI / 2;
-                shaft.position.x = arrowLen / 2;
+                shaft.rotation.x = Math.PI / 2;
+                shaft.position.z = arrowLen / 2;
                 arrowGroup.add(shaft);
 
                 const cone = new THREE.Mesh(
                     new THREE.ConeGeometry(0.05, 0.15, 8), arrowMat
                 );
-                cone.rotation.z = -Math.PI / 2;
-                cone.position.x = arrowLen + 0.06;
+                cone.rotation.x = Math.PI / 2;
+                cone.position.z = arrowLen + 0.06;
                 arrowGroup.add(cone);
 
                 box.setFromObject(model);
@@ -510,7 +529,7 @@
 
             const entry = {
                 container, renderer, scene, camera, modelGroup, boat, card,
-                plateMat, arrowGroup,
+                plateMat, plate, ring, arrowGroup,
                 getControls: () => controls,
                 setControls: (c) => { controls = c; },
             };
@@ -547,14 +566,46 @@
             if (entry.boxLine) entry.boxLine.visible = false;
             if (entry.headSprite) entry.headSprite.visible = true;
 
-            // Create OrbitControls now
+            // Hide disc plate/ring, add water grid plane
+            if (entry.plate) entry.plate.visible = false;
+            if (entry.ring) entry.ring.visible = false;
+
+            // Create 10m x 10m water grid surface
+            const waterGridTex = new THREE.TextureLoader().load(
+                'https://threejs.org/examples/textures/waternormals.jpg',
+                (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(6, 6); }
+            );
+            const gridPlane = new THREE.Mesh(
+                new THREE.PlaneGeometry(5, 5),
+                new THREE.MeshStandardMaterial({
+                    color: 0x0a1628, roughness: 0.6, metalness: 0.1,
+                    normalMap: waterGridTex, normalScale: new THREE.Vector2(0.2, 0.2),
+                })
+            );
+            gridPlane.rotation.x = -Math.PI / 2;
+            gridPlane.position.y = 0;
+            gridPlane.receiveShadow = true;
+            entry.scene.add(gridPlane);
+            entry._gridPlane = gridPlane;
+
+            // Grid lines (10m = 10 divisions)
+            const gridHelper = new THREE.GridHelper(5, 10, 0x1a3050, 0x122040);
+            gridHelper.position.y = 0.005;
+            entry.scene.add(gridHelper);
+            entry._gridHelper = gridHelper;
+
+            // Create OrbitControls — horizontal rotation only
             const ctrl = new OrbitControls(entry.camera, entry.renderer.domElement);
             ctrl.enableDamping = true;
             ctrl.dampingFactor = 0.08;
             ctrl.enablePan = false;
-            ctrl.minDistance = 1;
-            ctrl.maxDistance = 8;
+            ctrl.minDistance = 1.5;
+            ctrl.maxDistance = 6;
             ctrl.target.set(0, 0.3, 0);
+            // Lock vertical: fix the polar angle so you can only rotate horizontally
+            const currentPolar = ctrl.getPolarAngle();
+            ctrl.minPolarAngle = currentPolar;
+            ctrl.maxPolarAngle = currentPolar;
             entry.setControls(ctrl);
 
             // Resize after transition
@@ -570,6 +621,12 @@
             entry.arrowGroup.visible = false;
             if (entry.boxLine) entry.boxLine.visible = true;
             if (entry.headSprite) entry.headSprite.visible = false;
+
+            // Remove water grid, restore disc
+            if (entry._gridPlane) { entry.scene.remove(entry._gridPlane); entry._gridPlane = null; }
+            if (entry._gridHelper) { entry.scene.remove(entry._gridHelper); entry._gridHelper = null; }
+            if (entry.plate) entry.plate.visible = true;
+            if (entry.ring) entry.ring.visible = true;
 
             // Destroy orbit controls
             const ctrl = entry.getControls();
@@ -632,14 +689,12 @@
                 if (ctrl) {
                     ctrl.update();
 
-                    // Compute heading: 0° = boat front (+X) aimed at camera
+                    // Compute heading: 0° = boat front (+Z) aimed at camera
                     if (e.headCtx && e.headTex) {
-                        // Camera azimuth angle
-                        const camDir = new THREE.Vector3();
-                        e.camera.getWorldPosition(camDir);
-                        camDir.sub(ctrl.target);
-                        const camAzimuth = Math.atan2(camDir.z, camDir.x);
-                        // Boat forward is +X in model space, rotated by modelGroup.rotation.y
+                        const camPos = new THREE.Vector3();
+                        e.camera.getWorldPosition(camPos);
+                        camPos.sub(ctrl.target);
+                        const camAzimuth = Math.atan2(camPos.x, camPos.z);
                         const boatAzimuth = e.modelGroup.rotation.y;
                         let heading = THREE.MathUtils.radToDeg(boatAzimuth - camAzimuth);
                         heading = ((heading % 360) + 360) % 360;
