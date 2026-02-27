@@ -253,6 +253,37 @@
             display: flex;
         }
 
+        /* Heading overlay — shown only when expanded */
+        .heading-overlay {
+            display: none;
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            z-index: 10;
+            pointer-events: none;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .heading-overlay .model-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.5);
+            letter-spacing: 0.5px;
+        }
+
+        .heading-overlay .heading-deg {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 22px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .boat-card.expanded .heading-overlay {
+            display: block;
+        }
+
         .headers-hidden {
             opacity: 0;
             pointer-events: none;
@@ -337,6 +368,10 @@
             card.innerHTML = `
                 <div class="card-num">${boat.num}</div>
                 <button class="back-btn">✕</button>
+                <div class="heading-overlay">
+                    <div class="model-label">${boat.name} · ${boat.meters}m</div>
+                    <div class="heading-deg">0°</div>
+                </div>
                 <div class="card-3d"></div>
                 <div class="card-info">
                     <span class="name">${boat.name}</span>
@@ -537,26 +572,8 @@
                 // Position at waterline (y=0)
                 arrowGroup.position.set(0, 0.15, 0);
 
-                // Heading sprite — positioned above bounding box top
-                const headCanvas = document.createElement('canvas');
-                headCanvas.width = 256;
-                headCanvas.height = 128;
-                const headCtx = headCanvas.getContext('2d');
-                const headTex = new THREE.CanvasTexture(headCanvas);
-                const headSprite = new THREE.Sprite(
-                    new THREE.SpriteMaterial({ map: headTex, transparent: true, depthTest: false })
-                );
-                headSprite.scale.set(0.7, 0.35, 1);
-                // Position above bounding box top
-                const bboxTopY = fBox.max.y;
-                headSprite.position.set(0, bboxTopY + 0.25, 0);
-                entry.bboxTopY = bboxTopY;
-                headSprite.visible = false;
-                modelGroup.add(headSprite);
-                entry.headSprite = headSprite;
-                entry.headCtx = headCtx;
-                entry.headTex = headTex;
-                entry.headCanvas = headCanvas;
+                // Store heading overlay element
+                entry.headingDegEl = card.querySelector('.heading-deg');
             });
 
             const entry = {
@@ -593,9 +610,8 @@
             entry.card.classList.add('expanded');
             backdrop.classList.add('active');
 
-            // Show heading arrow, show heading sprite (keep bounding box visible)
+            // Show heading arrow
             entry.arrowGroup.visible = true;
-            if (entry.headSprite) entry.headSprite.visible = true;
 
             // Hide disc plate/ring, add water grid plane
             if (entry.plate) entry.plate.visible = false;
@@ -648,9 +664,8 @@
             if (!expandedEntry) return;
             const entry = expandedEntry;
 
-            // Hide arrow, hide heading sprite
+            // Hide arrow
             entry.arrowGroup.visible = false;
-            if (entry.headSprite) entry.headSprite.visible = false;
 
             // Remove water grid, restore disc
             if (entry._gridPlane) { entry.scene.remove(entry._gridPlane); entry._gridPlane = null; }
@@ -728,7 +743,7 @@
                     ctrl.update();
 
                     // Compute heading: 0° = bow aimed at camera
-                    if (e.headCtx && e.headTex) {
+                    if (e.headingDegEl) {
                         // Bow direction in world space
                         const bowLocal = e.bowAlongX
                             ? new THREE.Vector3(1, 0, 0)
@@ -745,15 +760,7 @@
                         // 0° = bow facing camera
                         let heading = THREE.MathUtils.radToDeg(bowAngle - camAngle);
                         heading = ((heading % 360) + 360) % 360;
-
-                        const ctx = e.headCtx;
-                        ctx.clearRect(0, 0, 256, 128);
-                        ctx.font = 'bold 72px Inter, sans-serif';
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-                        ctx.fillText(Math.round(heading) + '°', 128, 64);
-                        e.headTex.needsUpdate = true;
+                        e.headingDegEl.textContent = Math.round(heading) + '°';
                     }
                 }
 
