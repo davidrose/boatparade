@@ -478,6 +478,10 @@
                 const bCenter = new THREE.Vector3();
                 visibleBox.getSize(bSize);
                 visibleBox.getCenter(bCenter);
+                // Extend bottom below waterline so it never bobs above water
+                const waterPad = 0.06;
+                bSize.y += waterPad;
+                bCenter.y -= waterPad / 2;
                 const boxEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(bSize.x, bSize.y, bSize.z));
                 const boxLine = new THREE.LineSegments(boxEdges,
                     new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 })
