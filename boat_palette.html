@@ -513,6 +513,7 @@
 
                 // Determine forward axis: longest horizontal dimension
                 const bowAlongX = fSize.x >= fSize.z;
+                entry.bowAlongX = bowAlongX;
                 const arrowLen = 0.6;
                 const arrowMat = new THREE.MeshPhysicalMaterial({
                     color: 0x8898a8, roughness: 0.45, metalness: 0.15, clearcoat: 0.1,
@@ -546,7 +547,7 @@
                 // Position at waterline (y=0)
                 arrowGroup.position.set(0, 0.15, 0);
 
-                // Heading sprite — large text rendered in 3D above the boat
+                // Heading sprite — positioned above bounding box top
                 const headCanvas = document.createElement('canvas');
                 headCanvas.width = 256;
                 headCanvas.height = 128;
@@ -556,7 +557,10 @@
                     new THREE.SpriteMaterial({ map: headTex, transparent: true, depthTest: false })
                 );
                 headSprite.scale.set(0.7, 0.35, 1);
-                headSprite.position.set(0, 0.9, 0);
+                // Position above bounding box top
+                const bboxTopY = fBox.max.y;
+                headSprite.position.set(0, bboxTopY + 0.25, 0);
+                entry.bboxTopY = bboxTopY;
                 headSprite.visible = false;
                 modelGroup.add(headSprite);
                 entry.headSprite = headSprite;
@@ -607,13 +611,13 @@
             if (entry.plate) entry.plate.visible = false;
             if (entry.ring) entry.ring.visible = false;
 
-            // Create 10m x 10m water grid surface
+            // Create water grid surface extending to edges
             const waterGridTex = new THREE.TextureLoader().load(
                 'https://threejs.org/examples/textures/waternormals.jpg',
-                (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(6, 6); }
+                (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(20, 20); }
             );
             const gridPlane = new THREE.Mesh(
-                new THREE.PlaneGeometry(5, 5),
+                new THREE.PlaneGeometry(20, 20),
                 new THREE.MeshStandardMaterial({
                     color: 0x0a1628, roughness: 0.6, metalness: 0.1,
                     normalMap: waterGridTex, normalScale: new THREE.Vector2(0.2, 0.2),
@@ -625,8 +629,8 @@
             entry.scene.add(gridPlane);
             entry._gridPlane = gridPlane;
 
-            // Grid lines (10m = 10 divisions)
-            const gridHelper = new THREE.GridHelper(5, 10, 0x1a3050, 0x122040);
+            // Grid lines extending to edges
+            const gridHelper = new THREE.GridHelper(20, 40, 0x1a3050, 0x122040);
             gridHelper.position.y = 0.005;
             entry.scene.add(gridHelper);
             entry._gridHelper = gridHelper;
@@ -725,14 +729,16 @@
                 if (ctrl) {
                     ctrl.update();
 
-                    // Compute heading: 0° = boat front (+Z) aimed at camera
+                    // Compute heading: 0° = bow aimed at camera
                     if (e.headCtx && e.headTex) {
                         const camPos = new THREE.Vector3();
                         e.camera.getWorldPosition(camPos);
                         camPos.sub(ctrl.target);
                         const camAzimuth = Math.atan2(camPos.x, camPos.z);
-                        const boatAzimuth = e.modelGroup.rotation.y;
-                        let heading = THREE.MathUtils.radToDeg(boatAzimuth - camAzimuth);
+                        const boatRot = e.modelGroup.rotation.y;
+                        // Bow direction offset: +X boats need +PI/2 offset from +Z
+                        const bowOffset = e.bowAlongX ? Math.PI / 2 : 0;
+                        let heading = THREE.MathUtils.radToDeg(boatRot + bowOffset - camAzimuth);
                         heading = ((heading % 360) + 360) % 360;
 
                         const ctx = e.headCtx;
