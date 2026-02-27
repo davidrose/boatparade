@@ -464,6 +464,8 @@
                 model.position.x -= center.x;
                 model.position.z -= center.z;
                 model.position.y -= box.min.y;
+                // Raise slightly above waterline so hulls don't clip
+                model.position.y += 0.03;
 
                 const mat = new THREE.MeshPhysicalMaterial({
                     color: 0x8898a8, roughness: 0.45, metalness: 0.15, clearcoat: 0.1,
@@ -517,7 +519,7 @@
                 visibleBox.getSize(bSize);
                 visibleBox.getCenter(bCenter);
                 // Extend bottom below waterline so it never bobs above water
-                const waterPad = 0.06;
+                const waterPad = 0.25;
                 bSize.y += waterPad;
                 bCenter.y -= waterPad / 2;
                 const boxEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(bSize.x, bSize.y, bSize.z));
