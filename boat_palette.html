@@ -40,10 +40,9 @@
             letter-spacing: 1px;
             text-transform: uppercase;
             padding: 6px 0;
-            border-radius: 6px;
-            color: #999;
-            background: #222;
-            border: 1px solid #333;
+            color: #666;
+            background: transparent;
+            border: none;
         }
 
         #palette-grid {
@@ -253,11 +252,12 @@
         }
 
         .heading-overlay .model-label {
-            font-size: 18px;
+            font-size: 28px;
             font-weight: 600;
-            color: rgba(255, 255, 255, 0.6);
+            color: rgba(255, 255, 255, 0.7);
             letter-spacing: 0.3px;
             font-family: 'Inter', sans-serif;
+            white-space: nowrap;
         }
 
         .heading-overlay .heading-deg {
@@ -356,7 +356,7 @@
                 <div class="card-num">${boat.num}</div>
                 <button class="back-btn">✕</button>
                 <div class="heading-overlay">
-                    <div class="model-label">${boat.name} · ${boat.meters}m</div>
+                    <div class="model-label">${boat.name}'</div>
                     <div class="heading-deg">0°</div>
                 </div>
                 <div class="card-3d"></div>
@@ -436,7 +436,7 @@
 
             // Proportional scaling
             const maxMeters = 27.4;
-            const maxTarget = 3.0;
+            const maxTarget = 3.7;
             const proportionalTarget = Math.sqrt(boat.meters / maxMeters) * maxTarget;
             const targetSize = Math.max(proportionalTarget, 0.8);
 
