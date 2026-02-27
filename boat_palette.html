@@ -345,9 +345,9 @@
             const scene = new THREE.Scene();
             scene.background = null;
 
-            const camera = new THREE.PerspectiveCamera(30, container.clientWidth / container.clientHeight, 0.1, 500);
-            camera.position.set(1.8, 1.0, 2.2);
-            camera.lookAt(0, 0.15, 0);
+            const camera = new THREE.PerspectiveCamera(35, container.clientWidth / container.clientHeight, 0.1, 500);
+            camera.position.set(2.2, 1.2, 2.8);
+            camera.lookAt(0, 0.2, 0);
 
             const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -486,27 +486,48 @@
                 model.add(boxLine);
                 entry.boxLine = boxLine;
 
-                // Heading arrow — white, smaller, pointing along +Z (front of boat)
-                const arrowLen = 0.8;
-                const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-                const shaft = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.015, 0.015, arrowLen, 8), arrowMat
-                );
-                shaft.rotation.x = Math.PI / 2;
-                shaft.position.z = arrowLen / 2;
-                arrowGroup.add(shaft);
+                // Heading arrow — auto-detect bow, match boat material, at waterline
+                box.setFromObject(model);
+                const fBox = new THREE.Box3().setFromObject(model);
+                const fSize = new THREE.Vector3();
+                fBox.getSize(fSize);
+                const fCenter = new THREE.Vector3();
+                fBox.getCenter(fCenter);
 
-                const cone = new THREE.Mesh(
-                    new THREE.ConeGeometry(0.05, 0.15, 8), arrowMat
+                // Determine forward axis: longest horizontal dimension
+                const bowAlongX = fSize.x >= fSize.z;
+                const arrowLen = 0.6;
+                const arrowMat = new THREE.MeshPhysicalMaterial({
+                    color: 0x8898a8, roughness: 0.45, metalness: 0.15, clearcoat: 0.1,
+                    transparent: true, opacity: 0.82,
+                });
+
+                const shaft = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.012, 0.012, arrowLen, 8), arrowMat
                 );
-                cone.rotation.x = Math.PI / 2;
-                cone.position.z = arrowLen + 0.06;
+                const cone = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.03, 0.1, 8), arrowMat
+                );
+
+                if (bowAlongX) {
+                    // Bow is along +X
+                    shaft.rotation.z = -Math.PI / 2;
+                    shaft.position.x = fBox.max.x + arrowLen / 2 + 0.05;
+                    cone.rotation.z = -Math.PI / 2;
+                    cone.position.x = fBox.max.x + arrowLen + 0.1;
+                } else {
+                    // Bow is along +Z
+                    shaft.rotation.x = Math.PI / 2;
+                    shaft.position.z = fBox.max.z + arrowLen / 2 + 0.05;
+                    cone.rotation.x = Math.PI / 2;
+                    cone.position.z = fBox.max.z + arrowLen + 0.1;
+                }
+
+                arrowGroup.add(shaft);
                 arrowGroup.add(cone);
 
-                box.setFromObject(model);
-                const mc = new THREE.Vector3();
-                box.getCenter(mc);
-                arrowGroup.position.set(0, mc.y * 0.3, 0);
+                // Position at waterline (y=0)
+                arrowGroup.position.set(0, 0, 0);
 
                 // Heading sprite — large text rendered in 3D above the boat
                 const headCanvas = document.createElement('canvas');
@@ -634,8 +655,8 @@
             }
 
             // Reset camera
-            entry.camera.position.set(1.8, 1.0, 2.2);
-            entry.camera.lookAt(0, 0.15, 0);
+            entry.camera.position.set(2.2, 1.2, 2.8);
+            entry.camera.lookAt(0, 0.2, 0);
 
             entry.card.classList.remove('expanded');
             backdrop.classList.remove('active');
