@@ -20,46 +20,7 @@
             background: #1a1a1a;
             color: #e5e5e5;
             min-height: 100vh;
-        }
-
-        #header {
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            background: rgba(26, 26, 26, 0.9);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid #333;
-            padding: 10px 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .header-left h1 {
-            font-size: 18px;
-            font-weight: 700;
-            color: #fff;
-        }
-
-        .header-left .subtitle {
-            font-size: 12px;
-            color: #888;
-        }
-
-        .badge {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 10px;
-            padding: 3px 8px;
-            border-radius: 4px;
-            background: #2a2a2a;
-            border: 1px solid #333;
-            color: #888;
+            overflow-x: hidden;
         }
 
         #column-headers {
@@ -69,6 +30,7 @@
             max-width: 800px;
             margin: 12px auto 0;
             padding: 0 16px;
+            transition: opacity 0.4s, transform 0.4s;
         }
 
         .col-header {
@@ -93,26 +55,63 @@
             padding: 0 16px;
         }
 
+        /* ── Card ── */
         .boat-card {
             position: relative;
             background: #222;
             border: 1px solid #333;
             border-radius: 8px;
             overflow: hidden;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            cursor: default;
+            cursor: pointer;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .boat-card:hover {
             border-color: #555;
+            transform: translateY(-2px);
         }
 
-        .boat-card.hidden-card {
+        .boat-card.faded {
             opacity: 0;
-            transform: scale(0.9);
+            transform: scale(0.85);
             pointer-events: none;
-            position: absolute;
-            visibility: hidden;
+        }
+
+        .boat-card.expanded {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: min(420px, 90vw);
+            height: min(480px, 80vh);
+            z-index: 200;
+            border-color: #555;
+            box-shadow: 0 0 80px rgba(0, 0, 0, 0.8);
+        }
+
+        .boat-card.expanded .card-3d {
+            height: calc(100% - 36px);
+        }
+
+        .boat-card.expanded .card-num {
+            display: none;
+        }
+
+        /* Backdrop when expanded */
+        #backdrop {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 10, 10, 0.85);
+            z-index: 150;
+            cursor: pointer;
+        }
+
+        #backdrop.active {
+            display: block;
         }
 
         .card-num {
@@ -143,14 +142,11 @@
             transform: scale(1.15);
         }
 
-        .card-num:active {
-            transform: scale(0.95);
-        }
-
         .card-3d {
             width: 100%;
             height: 140px;
             position: relative;
+            transition: height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .card-3d canvas {
@@ -173,116 +169,72 @@
             color: #ccc;
         }
 
+        .boat-card.expanded .card-info .name {
+            font-size: 14px;
+        }
+
         .boat-card.placeholder {
             visibility: hidden;
         }
 
-        /* ── Expanded (Isolated) View ── */
-        #isolated-view {
+        /* Back button shown on expanded card */
+        .back-btn {
             display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: #1a1a1a;
-            z-index: 200;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #isolated-view.active {
-            display: flex;
-        }
-
-        #isolated-header {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 12px 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+            top: 8px;
+            right: 8px;
+            padding: 5px 12px;
+            border: 1px solid #555;
+            background: rgba(30, 30, 30, 0.9);
+            color: #ccc;
+            border-radius: 5px;
+            font-size: 11px;
+            cursor: pointer;
+            z-index: 10;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .back-btn:hover {
+            background: #333;
+            color: #fff;
+            border-color: #888;
+        }
+
+        .boat-card.expanded .back-btn {
+            display: block;
+        }
+
+        /* Heading label */
+        .heading-label {
+            display: none;
+            position: absolute;
+            bottom: 42px;
+            right: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #666;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 2px 6px;
+            border-radius: 3px;
             z-index: 10;
         }
 
-        #isolated-title {
-            font-size: 16px;
-            font-weight: 700;
-            color: #fff;
+        .boat-card.expanded .heading-label {
+            display: block;
         }
 
-        #isolated-subtitle {
-            font-size: 11px;
-            color: #666;
-            margin-top: 2px;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        #btn-reset {
-            padding: 8px 16px;
-            border: 1px solid #444;
-            background: #2a2a2a;
-            color: #ccc;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-family: 'Inter', sans-serif;
-        }
-
-        #btn-reset:hover {
-            background: #333;
-            border-color: #666;
-            color: #fff;
-        }
-
-        #isolated-canvas-wrap {
-            width: 400px;
-            height: 400px;
-            border: 1px solid #333;
-            border-radius: 12px;
-            overflow: hidden;
-            position: relative;
-            background: #1e1e1e;
-        }
-
-        #isolated-canvas-wrap canvas {
-            width: 100% !important;
-            height: 100% !important;
-        }
-
-        #heading-hint {
-            position: absolute;
-            bottom: 12px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 10px;
-            color: #555;
-            font-family: 'JetBrains Mono', monospace;
+        /* Column headers fade when expanded */
+        .headers-hidden {
+            opacity: 0;
             pointer-events: none;
-            transition: opacity 0.3s;
-        }
-
-        #heading-label {
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            font-size: 11px;
-            color: #888;
-            font-family: 'JetBrains Mono', monospace;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 3px 8px;
-            border-radius: 4px;
         }
     </style>
 </head>
 
 <body>
 
+    <div id="backdrop"></div>
 
     <div id="column-headers">
         <div class="col-header">Motorboats</div>
@@ -290,21 +242,6 @@
     </div>
 
     <div id="palette-grid"></div>
-
-    <!-- Isolated / Expanded View -->
-    <div id="isolated-view">
-        <div id="isolated-header">
-            <div>
-                <div id="isolated-title"></div>
-                <div id="isolated-subtitle">Drag arrow to set heading</div>
-            </div>
-            <button id="btn-reset">← Back to Palette</button>
-        </div>
-        <div id="isolated-canvas-wrap">
-            <span id="heading-hint">⟳ drag arrow to rotate</span>
-            <span id="heading-label">0°</span>
-        </div>
-    </div>
 
     <script type="importmap">
     {
@@ -336,8 +273,6 @@
 
         const motorBoats = BOATS.filter(b => b.type === 'motor');
         const sailBoats = BOATS.filter(b => b.type === 'sail');
-
-        // Pre-assign numbers: motorboats 1..N, then sailboats N+1..total
         motorBoats.forEach((b, i) => { b.num = i + 1; });
         sailBoats.forEach((b, i) => { b.num = motorBoats.length + i + 1; });
 
@@ -348,15 +283,17 @@
         }
 
         const grid = document.getElementById('palette-grid');
-        const cardData = []; // { container, renderer, scene, camera, modelGroup, boat, card }
+        const backdrop = document.getElementById('backdrop');
+        const colHeaders = document.getElementById('column-headers');
+        const cardEntries = []; // all card data
         const loader = new GLTFLoader();
+
+        let expandedEntry = null; // currently expanded
 
         rows.forEach(row => {
             createCard(row.motor, 'motor');
             createCard(row.sail, 'sail');
         });
-
-
 
         function createCard(boat, type) {
             const card = document.createElement('div');
@@ -369,10 +306,10 @@
                 return;
             }
 
-            const num = boat.num;
-
             card.innerHTML = `
-                <div class="card-num" data-idx="${num}">${num}</div>
+                <div class="card-num">${boat.num}</div>
+                <button class="back-btn">✕ Close</button>
+                <span class="heading-label">0°</span>
                 <div class="card-3d"></div>
                 <div class="card-info">
                     <span class="name">${boat.name}</span>
@@ -384,7 +321,6 @@
             const scene = new THREE.Scene();
             scene.background = null;
 
-            // Camera: tighter framing
             const camera = new THREE.PerspectiveCamera(30, container.clientWidth / container.clientHeight, 0.1, 500);
             camera.position.set(1.8, 1.0, 2.2);
             camera.lookAt(0, 0.15, 0);
@@ -394,19 +330,16 @@
             renderer.setSize(container.clientWidth, container.clientHeight);
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
             renderer.toneMappingExposure = 1.3;
-            // Enable shadows
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             container.appendChild(renderer.domElement);
 
-            // Improved lighting
+            // Lighting
             scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-
             const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
             keyLight.position.set(3, 6, 4);
             keyLight.castShadow = true;
-            keyLight.shadow.mapSize.width = 512;
-            keyLight.shadow.mapSize.height = 512;
+            keyLight.shadow.mapSize.set(512, 512);
             keyLight.shadow.camera.near = 0.1;
             keyLight.shadow.camera.far = 20;
             keyLight.shadow.camera.left = -3;
@@ -424,7 +357,7 @@
             rimLight.position.set(0, 1, -4);
             scene.add(rimLight);
 
-            // Shadow-receiving water plate — lighter, matte, animated
+            // Water plate
             const waterNormalTex = new THREE.TextureLoader().load(
                 'https://threejs.org/examples/textures/waternormals.jpg',
                 (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3, 3); }
@@ -434,14 +367,13 @@
                 normalMap: waterNormalTex, normalScale: new THREE.Vector2(0.2, 0.2),
             });
             const plate = new THREE.Mesh(
-                new THREE.CylinderGeometry(1.3, 1.3, 0.02, 48),
-                plateMat
+                new THREE.CylinderGeometry(1.3, 1.3, 0.02, 48), plateMat
             );
             plate.position.y = -0.01;
             plate.receiveShadow = true;
             scene.add(plate);
 
-            // Subtle ring
+            // Ring
             const ring = new THREE.Mesh(
                 new THREE.TorusGeometry(1.3, 0.01, 8, 64),
                 new THREE.MeshBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.4 })
@@ -458,6 +390,23 @@
             const maxTarget = 2.6;
             const proportionalTarget = Math.sqrt(boat.meters / maxMeters) * maxTarget;
             const targetSize = Math.max(proportionalTarget, 0.8);
+
+            // Heading arrow (initially hidden, shown when expanded)
+            const arrowGroup = new THREE.Group();
+            arrowGroup.visible = false;
+            modelGroup.add(arrowGroup);
+
+            // OrbitControls (disabled until expanded)
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.enabled = false;
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.08;
+            controls.enablePan = false;
+            controls.minDistance = 1;
+            controls.maxDistance = 8;
+            controls.target.set(0, 0.3, 0);
+
+            let loadedModel = null;
 
             loader.load(`models/${boat.file}`, (gltf) => {
                 const model = gltf.scene;
@@ -487,224 +436,6 @@
                         const n = (child.name || '').toLowerCase();
                         if (n.includes('plane') || n.includes('floor') || n.includes('shadow') || n.includes('water') || n.includes('wake')) child.visible = false;
                         if (child.geometry) {
-                            if (child.geometry.type === 'PlaneGeometry') { child.visible = false; }
-                            else {
-                                if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
-                                if (child.geometry.boundingBox && (child.geometry.boundingBox.max.y - child.geometry.boundingBox.min.y) < 0.1) child.visible = false;
-                            }
-                        }
-                    }
-                });
-
-                modelGroup.add(model);
-
-                // Bounding box wireframe — from visible meshes, parented to model so it rotates
-                const visibleBox = new THREE.Box3();
-                model.traverse(child => {
-                    if (child.isMesh && child.visible) {
-                        child.geometry.computeBoundingBox();
-                        const meshBox = child.geometry.boundingBox.clone();
-                        meshBox.applyMatrix4(child.matrixWorld);
-                        visibleBox.union(meshBox);
-                    }
-                });
-                // Convert to model-local coordinates
-                const invMatrix = new THREE.Matrix4().copy(model.matrixWorld).invert();
-                visibleBox.applyMatrix4(invMatrix);
-                const bSize = new THREE.Vector3();
-                const bCenter = new THREE.Vector3();
-                visibleBox.getSize(bSize);
-                visibleBox.getCenter(bCenter);
-                const boxGeo = new THREE.BoxGeometry(bSize.x, bSize.y, bSize.z);
-                const boxEdges = new THREE.EdgesGeometry(boxGeo);
-                const boxLine = new THREE.LineSegments(boxEdges,
-                    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 })
-                );
-                boxLine.position.copy(bCenter);
-                model.add(boxLine);
-            }, undefined, (err) => {
-                console.warn(`Failed to load ${boat.file}:`, err);
-            });
-
-            // Click handler on the number badge
-            const numBadge = card.querySelector('.card-num');
-            numBadge.addEventListener('click', (e) => {
-                e.stopPropagation();
-                openIsolatedView(num - 1, boat);
-            });
-
-            cardData.push({ container, renderer, scene, camera, modelGroup, boat, card, num, plateMat });
-        }
-
-        // ── Palette Animation Loop ──
-        const clock = new THREE.Clock();
-        let isIsolated = false;
-
-        function animate() {
-            requestAnimationFrame(animate);
-            const t = clock.getElapsedTime();
-
-            if (!isIsolated) {
-                cardData.forEach((e, i) => {
-                    e.modelGroup.rotation.y = t * 0.5;
-                    // Wave bobbing — each card has a slight phase offset
-                    e.modelGroup.position.y = Math.sin(t * 1.5 + i * 0.7) * 0.02;
-                    e.modelGroup.rotation.x = Math.sin(t * 1.2 + i * 0.5) * 0.015;
-                    e.modelGroup.rotation.z = Math.cos(t * 1.0 + i * 0.9) * 0.01;
-                    // Animate water normal map
-                    if (e.plateMat.normalMap) {
-                        e.plateMat.normalMap.offset.x = t * 0.02;
-                        e.plateMat.normalMap.offset.y = t * 0.015;
-                    }
-                    const r = e.container.getBoundingClientRect();
-                    if (r.bottom > 0 && r.top < window.innerHeight) {
-                        e.renderer.render(e.scene, e.camera);
-                    }
-                });
-            }
-
-            if (isIsolated && isoRenderer) {
-                if (!isoDragging) {
-                    isoModelGroup.rotation.y = t * 0.3;
-                }
-
-                isoRenderer.render(isoScene, isoCamera);
-            }
-        }
-        animate();
-
-        // ── Isolated View ──
-        let isoRenderer, isoScene, isoCamera, isoModelGroup, isoBoxHelper, isoControls;
-        let isoHeading = 0;
-        let isoDragging = false;
-        let isoDragStartAngle = 0;
-        let isoHeadingStart = 0;
-        let isoArrowGroup = null;
-
-        const isolatedView = document.getElementById('isolated-view');
-        const isolatedWrap = document.getElementById('isolated-canvas-wrap');
-        const isolatedTitle = document.getElementById('isolated-title');
-        const headingLabel = document.getElementById('heading-label');
-        const headingHint = document.getElementById('heading-hint');
-
-        function openIsolatedView(idx, boat) {
-            isIsolated = true;
-            isoHeading = 0;
-            isolatedView.classList.add('active');
-            isolatedTitle.textContent = `${idx + 1}. ${boat.name}`;
-
-            // Clean up previous
-            if (isoRenderer) {
-                isolatedWrap.removeChild(isoRenderer.domElement);
-                isoRenderer.dispose();
-            }
-
-            // Setup scene
-            isoScene = new THREE.Scene();
-            isoScene.background = new THREE.Color(0x1e1e1e);
-
-            isoCamera = new THREE.PerspectiveCamera(35, 1, 0.1, 500);
-            isoCamera.position.set(3, 2, 3.5);
-            isoCamera.lookAt(0, 0.3, 0);
-
-            isoRenderer = new THREE.WebGLRenderer({ antialias: true });
-            isoRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            isoRenderer.setSize(400, 400);
-            isoRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-            isoRenderer.toneMappingExposure = 1.4;
-            isoRenderer.shadowMap.enabled = true;
-            isoRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-            // Insert canvas before the hints
-            isolatedWrap.insertBefore(isoRenderer.domElement, isolatedWrap.firstChild);
-
-            // Lighting - premium 3-point
-            isoScene.add(new THREE.AmbientLight(0xffffff, 0.6));
-
-            const key = new THREE.DirectionalLight(0xffffff, 3.0);
-            key.position.set(4, 8, 5);
-            key.castShadow = true;
-            key.shadow.mapSize.width = 1024;
-            key.shadow.mapSize.height = 1024;
-            key.shadow.camera.near = 0.1;
-            key.shadow.camera.far = 30;
-            key.shadow.camera.left = -5;
-            key.shadow.camera.right = 5;
-            key.shadow.camera.top = 5;
-            key.shadow.camera.bottom = -5;
-            key.shadow.radius = 6;
-            isoScene.add(key);
-
-            const fill = new THREE.DirectionalLight(0x8ec8ff, 0.8);
-            fill.position.set(-4, 3, -3);
-            isoScene.add(fill);
-
-            const rim = new THREE.DirectionalLight(0xffd4a0, 0.5);
-            rim.position.set(0, 2, -5);
-            isoScene.add(rim);
-
-            // Ground plate with water texture & shadow
-            const isoWaterTex = new THREE.TextureLoader().load(
-                'https://threejs.org/examples/textures/waternormals.jpg',
-                (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3, 3); }
-            );
-            const ground = new THREE.Mesh(
-                new THREE.CylinderGeometry(2.5, 2.5, 0.02, 64),
-                new THREE.MeshStandardMaterial({
-                    color: 0x1a3a4a, roughness: 0.4, metalness: 0.2,
-                    normalMap: isoWaterTex, normalScale: new THREE.Vector2(0.3, 0.3),
-                })
-            );
-            ground.receiveShadow = true;
-            ground.position.y = -0.01;
-            isoScene.add(ground);
-
-            // Ground ring
-            const gRing = new THREE.Mesh(
-                new THREE.TorusGeometry(2.5, 0.015, 8, 64),
-                new THREE.MeshBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.3 })
-            );
-            gRing.rotation.x = -Math.PI / 2;
-            gRing.position.y = 0.005;
-            isoScene.add(gRing);
-
-            // Grid helper for reference
-            const gridHelper = new THREE.GridHelper(5, 10, 0x333333, 0x2a2a2a);
-            gridHelper.position.y = 0.01;
-            isoScene.add(gridHelper);
-
-            isoModelGroup = new THREE.Group();
-            isoScene.add(isoModelGroup);
-
-            // Load the model
-            loader.load(`models/${boat.file}`, (gltf) => {
-                const model = gltf.scene;
-                const box = new THREE.Box3().setFromObject(model);
-                const size = new THREE.Vector3();
-                box.getSize(size);
-                const sf = 2.2 / Math.max(size.x, size.y, size.z);
-                model.scale.setScalar(sf);
-
-                box.setFromObject(model);
-                const center = new THREE.Vector3();
-                box.getCenter(center);
-                model.position.x -= center.x;
-                model.position.z -= center.z;
-                model.position.y -= box.min.y;
-
-                const mat = new THREE.MeshPhysicalMaterial({
-                    color: 0xdcdcdc, roughness: 0.25, metalness: 0.1, clearcoat: 0.4,
-                    envMapIntensity: 1.0,
-                });
-
-                model.traverse(child => {
-                    if (child.isMesh) {
-                        child.material = mat;
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                        const n = (child.name || '').toLowerCase();
-                        if (n.includes('plane') || n.includes('floor') || n.includes('shadow') || n.includes('water') || n.includes('wake')) child.visible = false;
-                        if (child.geometry) {
                             if (child.geometry.type === 'PlaneGeometry') child.visible = false;
                             else {
                                 if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
@@ -714,140 +445,201 @@
                     }
                 });
 
-                isoModelGroup.add(model);
+                modelGroup.add(model);
+                loadedModel = model;
 
-                // Bounding box wireframe — parented to model so it rotates together
-                const isoVisBox = new THREE.Box3();
+                // Bounding box wireframe — parented to model
+                const visibleBox = new THREE.Box3();
                 model.traverse(child => {
                     if (child.isMesh && child.visible) {
                         child.geometry.computeBoundingBox();
-                        const mb = child.geometry.boundingBox.clone();
-                        mb.applyMatrix4(child.matrixWorld);
-                        isoVisBox.union(mb);
+                        const meshBox = child.geometry.boundingBox.clone();
+                        meshBox.applyMatrix4(child.matrixWorld);
+                        visibleBox.union(meshBox);
                     }
                 });
-                const isoInv = new THREE.Matrix4().copy(model.matrixWorld).invert();
-                isoVisBox.applyMatrix4(isoInv);
-                const ibs = new THREE.Vector3();
-                const ibc = new THREE.Vector3();
-                isoVisBox.getSize(ibs);
-                isoVisBox.getCenter(ibc);
-                const isoEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(ibs.x, ibs.y, ibs.z));
-                isoBoxHelper = new THREE.LineSegments(isoEdges,
-                    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+                const invMatrix = new THREE.Matrix4().copy(model.matrixWorld).invert();
+                visibleBox.applyMatrix4(invMatrix);
+                const bSize = new THREE.Vector3();
+                const bCenter = new THREE.Vector3();
+                visibleBox.getSize(bSize);
+                visibleBox.getCenter(bCenter);
+                const boxEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(bSize.x, bSize.y, bSize.z));
+                const boxLine = new THREE.LineSegments(boxEdges,
+                    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 })
                 );
-                isoBoxHelper.position.copy(ibc);
-                model.add(isoBoxHelper);
+                boxLine.position.copy(bCenter);
+                model.add(boxLine);
 
-                // Heading arrow (draggable)
-                isoArrowGroup = new THREE.Group();
-                const arrowLen = 1.5;
-
-                // Shaft
-                const shaftGeo = new THREE.CylinderGeometry(0.03, 0.03, arrowLen, 8);
-                const shaftMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6 });
-                const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+                // Build heading arrow
+                const arrowLen = 1.2;
+                const shaft = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.025, 0.025, arrowLen, 8),
+                    new THREE.MeshBasicMaterial({ color: 0x3b82f6 })
+                );
                 shaft.rotation.x = Math.PI / 2;
                 shaft.position.z = arrowLen / 2;
-                isoArrowGroup.add(shaft);
+                arrowGroup.add(shaft);
 
-                // Cone tip
-                const coneGeo = new THREE.ConeGeometry(0.08, 0.25, 8);
-                const coneMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6 });
-                const cone = new THREE.Mesh(coneGeo, coneMat);
+                const cone = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.07, 0.2, 8),
+                    new THREE.MeshBasicMaterial({ color: 0x3b82f6 })
+                );
                 cone.rotation.x = Math.PI / 2;
-                cone.position.z = arrowLen + 0.1;
-                isoArrowGroup.add(cone);
+                cone.position.z = arrowLen + 0.08;
+                arrowGroup.add(cone);
 
-                // Dot at base
-                const dotGeo = new THREE.SphereGeometry(0.08, 16, 16);
-                const dotMat = new THREE.MeshBasicMaterial({ color: 0x60a5fa });
-                const dot = new THREE.Mesh(dotGeo, dotMat);
-                dot.position.y = 0.1;
-                isoArrowGroup.add(dot);
+                const dot = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.06, 12, 12),
+                    new THREE.MeshBasicMaterial({ color: 0x60a5fa })
+                );
+                arrowGroup.add(dot);
 
-                // Position arrow at model center, slightly above ground
+                // Position arrow at model center height
                 box.setFromObject(model);
-                const modelCenter = new THREE.Vector3();
-                box.getCenter(modelCenter);
-                isoArrowGroup.position.set(0, modelCenter.y, 0);
-
-                isoModelGroup.add(isoArrowGroup);
+                const mc = new THREE.Vector3();
+                box.getCenter(mc);
+                arrowGroup.position.set(0, mc.y, 0);
             });
 
-            // Drag-to-rotate interaction
-            const canvas = isoRenderer.domElement;
-            canvas.style.cursor = 'grab';
+            const entry = { container, renderer, scene, camera, modelGroup, boat, card, plateMat, controls, arrowGroup, loadedModel: () => loadedModel };
 
-            canvas.addEventListener('pointerdown', onIsoPointerDown);
-            canvas.addEventListener('pointermove', onIsoPointerMove);
-            canvas.addEventListener('pointerup', onIsoPointerUp);
+            // Click anywhere on card to expand
+            card.addEventListener('click', (e) => {
+                if (e.target.closest('.back-btn')) return;
+                if (expandedEntry === entry) return; // already expanded
+                expandCard(entry);
+            });
 
-            headingLabel.textContent = '0°';
-            headingHint.style.opacity = '1';
+            // Back button
+            card.querySelector('.back-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                collapseCard();
+            });
+
+            cardEntries.push(entry);
         }
 
-        function onIsoPointerDown(e) {
-            const rect = isoRenderer.domElement.getBoundingClientRect();
-            const cx = rect.width / 2;
-            const cy = rect.height / 2;
-            const mx = e.clientX - rect.left;
-            const my = e.clientY - rect.top;
+        // ── Expand / Collapse ──
+        function expandCard(entry) {
+            expandedEntry = entry;
 
-            isoDragging = true;
-            isoDragStartAngle = Math.atan2(my - cy, mx - cx);
-            isoHeadingStart = isoModelGroup.rotation.y;
-            isoRenderer.domElement.style.cursor = 'grabbing';
-            isoRenderer.domElement.setPointerCapture(e.pointerId);
-            headingHint.style.opacity = '0';
+            // Fade out other cards and column headers
+            cardEntries.forEach(e => {
+                if (e !== entry) e.card.classList.add('faded');
+            });
+            colHeaders.classList.add('headers-hidden');
+
+            // Expand the selected card
+            entry.card.classList.add('expanded');
+            backdrop.classList.add('active');
+
+            // Enable orbit controls
+            entry.controls.enabled = true;
+
+            // Show heading arrow
+            entry.arrowGroup.visible = true;
+
+            // Resize renderer after transition
+            setTimeout(() => {
+                resizeEntry(entry);
+            }, 50);
+            // Resize again after CSS transition completes
+            setTimeout(() => {
+                resizeEntry(entry);
+            }, 550);
         }
 
-        function onIsoPointerMove(e) {
-            if (!isoDragging) return;
-            const rect = isoRenderer.domElement.getBoundingClientRect();
-            const cx = rect.width / 2;
-            const cy = rect.height / 2;
-            const mx = e.clientX - rect.left;
-            const my = e.clientY - rect.top;
+        function collapseCard() {
+            if (!expandedEntry) return;
 
-            const currentAngle = Math.atan2(my - cy, mx - cx);
-            const delta = currentAngle - isoDragStartAngle;
+            // Hide heading arrow
+            expandedEntry.arrowGroup.visible = false;
 
-            isoModelGroup.rotation.y = isoHeadingStart + delta;
+            // Disable orbit controls, reset camera
+            expandedEntry.controls.enabled = false;
+            expandedEntry.camera.position.set(1.8, 1.0, 2.2);
+            expandedEntry.camera.lookAt(0, 0.15, 0);
+            expandedEntry.controls.target.set(0, 0.3, 0);
+            expandedEntry.controls.update();
 
-            // Show heading in degrees
-            let deg = THREE.MathUtils.radToDeg(isoModelGroup.rotation.y) % 360;
-            if (deg < 0) deg += 360;
-            headingLabel.textContent = Math.round(deg) + '°';
+            // Collapse card
+            expandedEntry.card.classList.remove('expanded');
+            backdrop.classList.remove('active');
+
+            // Unfade all cards
+            cardEntries.forEach(e => e.card.classList.remove('faded'));
+            colHeaders.classList.remove('headers-hidden');
+
+            // Resize back after transition
+            const entry = expandedEntry;
+            expandedEntry = null;
+            setTimeout(() => resizeEntry(entry), 550);
         }
 
-        function onIsoPointerUp(e) {
-            isoDragging = false;
-            isoRenderer.domElement.style.cursor = 'grab';
-            isoRenderer.domElement.releasePointerCapture(e.pointerId);
-        }
-
-        // Reset button
-        document.getElementById('btn-reset').addEventListener('click', () => {
-            isIsolated = false;
-            isolatedView.classList.remove('active');
-
-            if (isoRenderer) {
-                const canvas = isoRenderer.domElement;
-                canvas.removeEventListener('pointerdown', onIsoPointerDown);
-                canvas.removeEventListener('pointermove', onIsoPointerMove);
-                canvas.removeEventListener('pointerup', onIsoPointerUp);
+        function resizeEntry(entry) {
+            const w = entry.container.clientWidth;
+            const h = entry.container.clientHeight;
+            if (w > 0 && h > 0) {
+                entry.camera.aspect = w / h;
+                entry.camera.updateProjectionMatrix();
+                entry.renderer.setSize(w, h);
             }
+        }
+
+        // Backdrop click to close
+        backdrop.addEventListener('click', collapseCard);
+
+        // Escape key to close
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') collapseCard();
         });
 
-        // Handle resize
-        window.addEventListener('resize', () => {
-            cardData.forEach(e => {
-                const w = e.container.clientWidth, h = e.container.clientHeight;
-                e.camera.aspect = w / h;
-                e.camera.updateProjectionMatrix();
-                e.renderer.setSize(w, h);
+        // ── Animation Loop ──
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const t = clock.getElapsedTime();
+
+            cardEntries.forEach((e, i) => {
+                // Spin (auto-rotate only when not expanded or when expanded and orbit is idle)
+                if (e !== expandedEntry) {
+                    e.modelGroup.rotation.y = t * 0.5;
+                }
+
+                // Wave bobbing
+                e.modelGroup.position.y = Math.sin(t * 1.5 + i * 0.7) * 0.02;
+                e.modelGroup.rotation.x = Math.sin(t * 1.2 + i * 0.5) * 0.015;
+                e.modelGroup.rotation.z = Math.cos(t * 1.0 + i * 0.9) * 0.01;
+
+                // Animate water
+                if (e.plateMat.normalMap) {
+                    e.plateMat.normalMap.offset.x = t * 0.02;
+                    e.plateMat.normalMap.offset.y = t * 0.015;
+                }
+
+                // Update controls if expanded
+                if (e === expandedEntry && e.controls.enabled) {
+                    e.controls.update();
+                    // Heading label
+                    let deg = THREE.MathUtils.radToDeg(e.modelGroup.rotation.y) % 360;
+                    if (deg < 0) deg += 360;
+                    e.card.querySelector('.heading-label').textContent = Math.round(deg) + '°';
+                }
+
+                // Render if visible
+                const r = e.container.getBoundingClientRect();
+                if (r.bottom > 0 && r.top < window.innerHeight && r.width > 0) {
+                    e.renderer.render(e.scene, e.camera);
+                }
             });
+        }
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            cardEntries.forEach(e => resizeEntry(e));
         });
     </script>
 </body>
