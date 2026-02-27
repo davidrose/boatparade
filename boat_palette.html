@@ -90,26 +90,13 @@
             background: transparent;
             box-shadow: none;
             cursor: default;
-            animation: splashDown 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation: fadeDropIn 0.5s ease-out forwards;
         }
 
-        @keyframes splashDown {
+        @keyframes fadeDropIn {
             0% {
                 opacity: 0;
-                transform: translate(-50%, -80%) scale(0.5);
-            }
-
-            40% {
-                opacity: 1;
-                transform: translate(-50%, -46%) scale(1.02);
-            }
-
-            60% {
-                transform: translate(-50%, -52%) scale(0.98);
-            }
-
-            80% {
-                transform: translate(-50%, -49%) scale(1.01);
+                transform: translate(-50%, -55%) scale(0.95);
             }
 
             100% {
@@ -154,13 +141,12 @@
             display: block;
         }
 
-        /* Number — no circle, no background */
         .card-num {
             position: absolute;
-            top: 5px;
-            left: 8px;
+            top: 8px;
+            left: 12px;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 16px;
+            font-size: 20px;
             font-weight: 700;
             color: rgba(255, 255, 255, 0.5);
             z-index: 5;
@@ -195,7 +181,7 @@
 
         .card-info {
             padding: 6px 10px;
-            border-top: 1px solid #333;
+            border-top: none;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -384,8 +370,8 @@
             scene.background = null;
 
             const camera = new THREE.PerspectiveCamera(35, container.clientWidth / container.clientHeight, 0.1, 500);
-            camera.position.set(2.2, 0.9, 2.8);
-            camera.lookAt(0, 0.35, 0);
+            camera.position.set(2.2, 1.4, 2.8);
+            camera.lookAt(0, 0.1, 0);
 
             const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -681,8 +667,8 @@
             }
 
             // Reset camera
-            entry.camera.position.set(2.2, 0.9, 2.8);
-            entry.camera.lookAt(0, 0.35, 0);
+            entry.camera.position.set(2.2, 1.4, 2.8);
+            entry.camera.lookAt(0, 0.1, 0);
 
             entry.card.classList.remove('expanded');
             backdrop.classList.remove('active');
