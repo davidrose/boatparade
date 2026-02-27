@@ -473,6 +473,10 @@
                 model.position.x -= center.x;
                 model.position.z -= center.z;
                 model.position.y -= box.min.y;
+                // Shift tall boats down so sails/masts are visible
+                if (boat.name.includes('Super Sail')) {
+                    model.position.y -= 0.35;
+                }
 
                 const mat = new THREE.MeshPhysicalMaterial({
                     color: 0xa8b0b8, roughness: 0.45, metalness: 0.15, clearcoat: 0.15,
