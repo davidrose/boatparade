@@ -517,8 +517,8 @@
                 const headSprite = new THREE.Sprite(
                     new THREE.SpriteMaterial({ map: headTex, transparent: true, depthTest: false })
                 );
-                headSprite.scale.set(1.6, 0.8, 1);
-                headSprite.position.set(0, Math.max(bSize.y * 1.0 + 0.5, 2.0), 0);
+                headSprite.scale.set(2.0, 1.0, 1);
+                headSprite.position.set(0, 1.5, 0);
                 headSprite.visible = false;
                 modelGroup.add(headSprite);
                 entry.headSprite = headSprite;
@@ -561,9 +561,8 @@
             entry.card.classList.add('expanded');
             backdrop.classList.add('active');
 
-            // Show heading arrow, hide bounding box, show heading sprite
+            // Show heading arrow, show heading sprite (keep bounding box visible)
             entry.arrowGroup.visible = true;
-            if (entry.boxLine) entry.boxLine.visible = false;
             if (entry.headSprite) entry.headSprite.visible = true;
 
             // Hide disc plate/ring, add water grid plane
@@ -617,9 +616,8 @@
             if (!expandedEntry) return;
             const entry = expandedEntry;
 
-            // Hide arrow, restore bounding box, hide heading sprite
+            // Hide arrow, hide heading sprite
             entry.arrowGroup.visible = false;
-            if (entry.boxLine) entry.boxLine.visible = true;
             if (entry.headSprite) entry.headSprite.visible = false;
 
             // Remove water grid, restore disc
