@@ -90,13 +90,26 @@
             background: transparent;
             box-shadow: none;
             cursor: default;
-            animation: expandIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            animation: splashDown 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         }
 
-        @keyframes expandIn {
+        @keyframes splashDown {
             0% {
-                opacity: 0.7;
-                transform: translate(-50%, -50%) scale(0.6);
+                opacity: 0;
+                transform: translate(-50%, -80%) scale(0.5);
+            }
+
+            40% {
+                opacity: 1;
+                transform: translate(-50%, -46%) scale(1.02);
+            }
+
+            60% {
+                transform: translate(-50%, -52%) scale(0.98);
+            }
+
+            80% {
+                transform: translate(-50%, -49%) scale(1.01);
             }
 
             100% {
