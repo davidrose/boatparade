@@ -729,14 +729,21 @@
 
                     // Compute heading: 0° = bow aimed at camera
                     if (e.headCtx && e.headTex) {
+                        // Bow direction in world space
+                        const bowLocal = e.bowAlongX
+                            ? new THREE.Vector3(1, 0, 0)
+                            : new THREE.Vector3(0, 0, 1);
+                        bowLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), e.modelGroup.rotation.y);
+                        const bowAngle = Math.atan2(bowLocal.x, bowLocal.z);
+
+                        // Camera direction from target
                         const camPos = new THREE.Vector3();
                         e.camera.getWorldPosition(camPos);
                         camPos.sub(ctrl.target);
-                        const camAzimuth = Math.atan2(camPos.x, camPos.z);
-                        const boatRot = e.modelGroup.rotation.y;
-                        // Bow direction offset: +X boats need +PI offset
-                        const bowOffset = e.bowAlongX ? Math.PI : Math.PI / 2;
-                        let heading = THREE.MathUtils.radToDeg(boatRot + bowOffset - camAzimuth);
+                        const camAngle = Math.atan2(camPos.x, camPos.z);
+
+                        // 0° = bow facing camera
+                        let heading = THREE.MathUtils.radToDeg(bowAngle - camAngle);
                         heading = ((heading % 360) + 360) % 360;
 
                         const ctx = e.headCtx;
