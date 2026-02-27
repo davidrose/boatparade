@@ -468,6 +468,17 @@
                     transparent: true, opacity: 0.82,
                 });
 
+                // Hide unrelated models packed in the same GLB
+                // These GLBs accumulate earlier models; keep only the last AIS_ boat node
+                const boatNodes = model.children.filter(c => {
+                    const n = c.name || '';
+                    return n.startsWith('AIS_') && !n.includes('Surface');
+                });
+                if (boatNodes.length > 1) {
+                    // Keep only the last one (the target model)
+                    boatNodes.slice(0, -1).forEach(node => { node.visible = false; });
+                }
+
                 model.traverse(child => {
                     if (child.isMesh) {
                         child.material = mat;
