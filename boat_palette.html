@@ -431,10 +431,17 @@
             rimLight.position.set(0, 1, -4);
             scene.add(rimLight);
 
-            // Shadow-receiving plate
+            // Shadow-receiving water plate
+            const waterNormalTex = new THREE.TextureLoader().load(
+                'https://threejs.org/examples/textures/waternormals.jpg',
+                (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(2, 2); }
+            );
             const plate = new THREE.Mesh(
                 new THREE.CylinderGeometry(1.3, 1.3, 0.02, 48),
-                new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.8, metalness: 0.1 })
+                new THREE.MeshStandardMaterial({
+                    color: 0x1a3a4a, roughness: 0.4, metalness: 0.2,
+                    normalMap: waterNormalTex, normalScale: new THREE.Vector2(0.3, 0.3),
+                })
             );
             plate.position.y = -0.01;
             plate.receiveShadow = true;
@@ -497,11 +504,17 @@
 
                 modelGroup.add(model);
 
-                // Bounding box wireframe
-                const finalBox = new THREE.Box3().setFromObject(model);
-                const boxHelper = new THREE.Box3Helper(finalBox, 0x3b82f6);
+                // Bounding box wireframe — only from VISIBLE meshes
+                const visibleBox = new THREE.Box3();
+                model.traverse(child => {
+                    if (child.isMesh && child.visible) {
+                        const childBox = new THREE.Box3().setFromObject(child);
+                        visibleBox.union(childBox);
+                    }
+                });
+                const boxHelper = new THREE.Box3Helper(visibleBox, 0xffffff);
                 boxHelper.material.transparent = true;
-                boxHelper.material.opacity = 0.3;
+                boxHelper.material.opacity = 0.25;
                 modelGroup.add(boxHelper);
             }, undefined, (err) => {
                 console.warn(`Failed to load ${boat.file}:`, err);
@@ -615,10 +628,17 @@
             rim.position.set(0, 2, -5);
             isoScene.add(rim);
 
-            // Ground plate with shadow
+            // Ground plate with water texture & shadow
+            const isoWaterTex = new THREE.TextureLoader().load(
+                'https://threejs.org/examples/textures/waternormals.jpg',
+                (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3, 3); }
+            );
             const ground = new THREE.Mesh(
                 new THREE.CylinderGeometry(2.5, 2.5, 0.02, 64),
-                new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.9, metalness: 0.05 })
+                new THREE.MeshStandardMaterial({
+                    color: 0x1a3a4a, roughness: 0.4, metalness: 0.2,
+                    normalMap: isoWaterTex, normalScale: new THREE.Vector2(0.3, 0.3),
+                })
             );
             ground.receiveShadow = true;
             ground.position.y = -0.01;
@@ -681,8 +701,14 @@
 
                 isoModelGroup.add(model);
 
-                // Bounding box
-                isoBoxHelper = new THREE.Box3Helper(new THREE.Box3().setFromObject(model), 0x3b82f6);
+                // Bounding box — from visible meshes only
+                const isoVisBox = new THREE.Box3();
+                model.traverse(child => {
+                    if (child.isMesh && child.visible) {
+                        isoVisBox.union(new THREE.Box3().setFromObject(child));
+                    }
+                });
+                isoBoxHelper = new THREE.Box3Helper(isoVisBox, 0xffffff);
                 isoModelGroup.add(isoBoxHelper);
 
                 // Heading arrow (draggable)
