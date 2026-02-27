@@ -416,7 +416,7 @@
                 normalMap: waterNormalTex, normalScale: new THREE.Vector2(0.25, 0.25),
             });
             const plate = new THREE.Mesh(
-                new THREE.CylinderGeometry(1.3, 1.3, 0.02, 48), plateMat
+                new THREE.CylinderGeometry(1.82, 1.82, 0.02, 48), plateMat
             );
             plate.position.y = -0.01;
             plate.receiveShadow = true;
@@ -424,7 +424,7 @@
 
             // Ring
             const ring = new THREE.Mesh(
-                new THREE.TorusGeometry(1.3, 0.01, 8, 64),
+                new THREE.TorusGeometry(1.82, 0.01, 8, 64),
                 new THREE.MeshBasicMaterial({ color: 0x334455, transparent: true, opacity: 0.4 })
             );
             ring.rotation.x = -Math.PI / 2;
@@ -436,7 +436,7 @@
 
             // Proportional scaling
             const maxMeters = 27.4;
-            const maxTarget = 3.7;
+            const maxTarget = 4.4;
             const proportionalTarget = Math.sqrt(boat.meters / maxMeters) * maxTarget;
             const targetSize = Math.max(proportionalTarget, 0.8);
 
