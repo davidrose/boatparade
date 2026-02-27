@@ -67,8 +67,10 @@
         }
 
         .boat-card:hover {
-            border-color: #555;
-            transform: translateY(-2px);
+            border-color: #6aa;
+            transform: translateY(-3px);
+            box-shadow: 0 6px 24px rgba(80, 180, 200, 0.15);
+            background: #282828;
         }
 
         .boat-card.faded {
@@ -87,6 +89,12 @@
             z-index: 200;
             border-color: #555;
             box-shadow: 0 0 80px rgba(0, 0, 0, 0.8);
+            cursor: default;
+        }
+
+        .boat-card.expanded:hover {
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 80px rgba(0, 0, 0, 0.8);
         }
 
         .boat-card.expanded .card-3d {
@@ -97,7 +105,7 @@
             display: none;
         }
 
-        /* Backdrop when expanded */
+        /* Backdrop */
         #backdrop {
             display: none;
             position: fixed;
@@ -114,32 +122,25 @@
             display: block;
         }
 
+        /* Number — no circle, no background */
         .card-num {
             position: absolute;
-            top: 6px;
-            left: 6px;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            top: 5px;
+            left: 8px;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
+            font-size: 16px;
             font-weight: 700;
-            background: rgba(0, 0, 0, 0.6);
-            color: #ccc;
-            border: 1px solid #555;
+            color: rgba(255, 255, 255, 0.5);
             z-index: 5;
             cursor: pointer;
             transition: all 0.2s ease;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
         }
 
         .card-num:hover {
-            background: rgba(59, 130, 246, 0.3);
-            border-color: #3b82f6;
-            color: #fff;
-            transform: scale(1.15);
+            color: rgba(100, 200, 255, 0.9);
+            transform: scale(1.2);
+            text-shadow: 0 0 8px rgba(100, 200, 255, 0.4);
         }
 
         .card-3d {
@@ -153,6 +154,11 @@
             width: 100% !important;
             height: 100% !important;
             outline: none;
+            pointer-events: none;
+        }
+
+        .boat-card.expanded .card-3d canvas {
+            pointer-events: auto;
         }
 
         .card-info {
@@ -177,7 +183,7 @@
             visibility: hidden;
         }
 
-        /* Back button shown on expanded card */
+        /* Back button */
         .back-btn {
             display: none;
             position: absolute;
@@ -224,7 +230,6 @@
             display: block;
         }
 
-        /* Column headers fade when expanded */
         .headers-hidden {
             opacity: 0;
             pointer-events: none;
@@ -285,10 +290,10 @@
         const grid = document.getElementById('palette-grid');
         const backdrop = document.getElementById('backdrop');
         const colHeaders = document.getElementById('column-headers');
-        const cardEntries = []; // all card data
+        const cardEntries = [];
         const loader = new GLTFLoader();
 
-        let expandedEntry = null; // currently expanded
+        let expandedEntry = null;
 
         rows.forEach(row => {
             createCard(row.motor, 'motor');
@@ -335,8 +340,8 @@
             container.appendChild(renderer.domElement);
 
             // Lighting
-            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-            const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            const keyLight = new THREE.DirectionalLight(0xfff0e0, 2.2);
             keyLight.position.set(3, 6, 4);
             keyLight.castShadow = true;
             keyLight.shadow.mapSize.set(512, 512);
@@ -349,22 +354,22 @@
             keyLight.shadow.radius = 4;
             scene.add(keyLight);
 
-            const fillLight = new THREE.DirectionalLight(0x9bb8d4, 0.6);
+            const fillLight = new THREE.DirectionalLight(0x7090b0, 0.5);
             fillLight.position.set(-3, 2, -2);
             scene.add(fillLight);
 
-            const rimLight = new THREE.DirectionalLight(0xffd4a0, 0.4);
+            const rimLight = new THREE.DirectionalLight(0xffd4a0, 0.3);
             rimLight.position.set(0, 1, -4);
             scene.add(rimLight);
 
-            // Water plate
+            // Water plate — very dark blue
             const waterNormalTex = new THREE.TextureLoader().load(
                 'https://threejs.org/examples/textures/waternormals.jpg',
                 (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3, 3); }
             );
             const plateMat = new THREE.MeshStandardMaterial({
-                color: 0x4a8a9a, roughness: 0.75, metalness: 0.05,
-                normalMap: waterNormalTex, normalScale: new THREE.Vector2(0.2, 0.2),
+                color: 0x0a1628, roughness: 0.7, metalness: 0.1,
+                normalMap: waterNormalTex, normalScale: new THREE.Vector2(0.25, 0.25),
             });
             const plate = new THREE.Mesh(
                 new THREE.CylinderGeometry(1.3, 1.3, 0.02, 48), plateMat
@@ -376,7 +381,7 @@
             // Ring
             const ring = new THREE.Mesh(
                 new THREE.TorusGeometry(1.3, 0.01, 8, 64),
-                new THREE.MeshBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.4 })
+                new THREE.MeshBasicMaterial({ color: 0x334455, transparent: true, opacity: 0.4 })
             );
             ring.rotation.x = -Math.PI / 2;
             ring.position.y = 0.005;
@@ -391,22 +396,13 @@
             const proportionalTarget = Math.sqrt(boat.meters / maxMeters) * maxTarget;
             const targetSize = Math.max(proportionalTarget, 0.8);
 
-            // Heading arrow (initially hidden, shown when expanded)
+            // Heading arrow (initially hidden)
             const arrowGroup = new THREE.Group();
             arrowGroup.visible = false;
             modelGroup.add(arrowGroup);
 
-            // OrbitControls (disabled until expanded)
-            const controls = new OrbitControls(camera, renderer.domElement);
-            controls.enabled = false;
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.08;
-            controls.enablePan = false;
-            controls.minDistance = 1;
-            controls.maxDistance = 8;
-            controls.target.set(0, 0.3, 0);
-
-            let loadedModel = null;
+            // No OrbitControls at init — created on expand only
+            let controls = null;
 
             loader.load(`models/${boat.file}`, (gltf) => {
                 const model = gltf.scene;
@@ -424,8 +420,8 @@
                 model.position.y -= box.min.y;
 
                 const mat = new THREE.MeshPhysicalMaterial({
-                    color: 0xa8b0b8, roughness: 0.45, metalness: 0.15, clearcoat: 0.15,
-                    transparent: true, opacity: 0.92,
+                    color: 0x8898a8, roughness: 0.45, metalness: 0.15, clearcoat: 0.1,
+                    transparent: true, opacity: 0.82,
                 });
 
                 model.traverse(child => {
@@ -446,9 +442,8 @@
                 });
 
                 modelGroup.add(model);
-                loadedModel = model;
 
-                // Bounding box wireframe — parented to model
+                // Bounding box wireframe
                 const visibleBox = new THREE.Box3();
                 model.traverse(child => {
                     if (child.isMesh && child.visible) {
@@ -471,7 +466,7 @@
                 boxLine.position.copy(bCenter);
                 model.add(boxLine);
 
-                // Build heading arrow
+                // Heading arrow
                 const arrowLen = 1.2;
                 const shaft = new THREE.Mesh(
                     new THREE.CylinderGeometry(0.025, 0.025, arrowLen, 8),
@@ -495,19 +490,23 @@
                 );
                 arrowGroup.add(dot);
 
-                // Position arrow at model center height
                 box.setFromObject(model);
                 const mc = new THREE.Vector3();
                 box.getCenter(mc);
                 arrowGroup.position.set(0, mc.y, 0);
             });
 
-            const entry = { container, renderer, scene, camera, modelGroup, boat, card, plateMat, controls, arrowGroup, loadedModel: () => loadedModel };
+            const entry = {
+                container, renderer, scene, camera, modelGroup, boat, card,
+                plateMat, arrowGroup,
+                getControls: () => controls,
+                setControls: (c) => { controls = c; },
+            };
 
-            // Click anywhere on card to expand
+            // Click card to expand
             card.addEventListener('click', (e) => {
                 if (e.target.closest('.back-btn')) return;
-                if (expandedEntry === entry) return; // already expanded
+                if (expandedEntry === entry) return;
                 expandCard(entry);
             });
 
@@ -524,55 +523,54 @@
         function expandCard(entry) {
             expandedEntry = entry;
 
-            // Fade out other cards and column headers
             cardEntries.forEach(e => {
                 if (e !== entry) e.card.classList.add('faded');
             });
             colHeaders.classList.add('headers-hidden');
-
-            // Expand the selected card
             entry.card.classList.add('expanded');
             backdrop.classList.add('active');
-
-            // Enable orbit controls
-            entry.controls.enabled = true;
 
             // Show heading arrow
             entry.arrowGroup.visible = true;
 
-            // Resize renderer after transition
-            setTimeout(() => {
-                resizeEntry(entry);
-            }, 50);
-            // Resize again after CSS transition completes
-            setTimeout(() => {
-                resizeEntry(entry);
-            }, 550);
+            // Create OrbitControls now
+            const ctrl = new OrbitControls(entry.camera, entry.renderer.domElement);
+            ctrl.enableDamping = true;
+            ctrl.dampingFactor = 0.08;
+            ctrl.enablePan = false;
+            ctrl.minDistance = 1;
+            ctrl.maxDistance = 8;
+            ctrl.target.set(0, 0.3, 0);
+            entry.setControls(ctrl);
+
+            // Resize after transition
+            setTimeout(() => resizeEntry(entry), 50);
+            setTimeout(() => resizeEntry(entry), 550);
         }
 
         function collapseCard() {
             if (!expandedEntry) return;
+            const entry = expandedEntry;
 
-            // Hide heading arrow
-            expandedEntry.arrowGroup.visible = false;
+            // Hide arrow
+            entry.arrowGroup.visible = false;
 
-            // Disable orbit controls, reset camera
-            expandedEntry.controls.enabled = false;
-            expandedEntry.camera.position.set(1.8, 1.0, 2.2);
-            expandedEntry.camera.lookAt(0, 0.15, 0);
-            expandedEntry.controls.target.set(0, 0.3, 0);
-            expandedEntry.controls.update();
+            // Destroy orbit controls
+            const ctrl = entry.getControls();
+            if (ctrl) {
+                ctrl.dispose();
+                entry.setControls(null);
+            }
 
-            // Collapse card
-            expandedEntry.card.classList.remove('expanded');
+            // Reset camera
+            entry.camera.position.set(1.8, 1.0, 2.2);
+            entry.camera.lookAt(0, 0.15, 0);
+
+            entry.card.classList.remove('expanded');
             backdrop.classList.remove('active');
-
-            // Unfade all cards
             cardEntries.forEach(e => e.card.classList.remove('faded'));
             colHeaders.classList.remove('headers-hidden');
 
-            // Resize back after transition
-            const entry = expandedEntry;
             expandedEntry = null;
             setTimeout(() => resizeEntry(entry), 550);
         }
@@ -587,13 +585,8 @@
             }
         }
 
-        // Backdrop click to close
         backdrop.addEventListener('click', collapseCard);
-
-        // Escape key to close
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') collapseCard();
-        });
+        window.addEventListener('keydown', (e) => { if (e.key === 'Escape') collapseCard(); });
 
         // ── Animation Loop ──
         const clock = new THREE.Clock();
@@ -603,7 +596,6 @@
             const t = clock.getElapsedTime();
 
             cardEntries.forEach((e, i) => {
-                // Spin (auto-rotate only when not expanded or when expanded and orbit is idle)
                 if (e !== expandedEntry) {
                     e.modelGroup.rotation.y = t * 0.5;
                 }
@@ -619,14 +611,9 @@
                     e.plateMat.normalMap.offset.y = t * 0.015;
                 }
 
-                // Update controls if expanded
-                if (e === expandedEntry && e.controls.enabled) {
-                    e.controls.update();
-                    // Heading label
-                    let deg = THREE.MathUtils.radToDeg(e.modelGroup.rotation.y) % 360;
-                    if (deg < 0) deg += 360;
-                    e.card.querySelector('.heading-label').textContent = Math.round(deg) + '°';
-                }
+                // Update orbit controls if expanded
+                const ctrl = e.getControls();
+                if (ctrl) ctrl.update();
 
                 // Render if visible
                 const r = e.container.getBoundingClientRect();
@@ -637,7 +624,6 @@
         }
         animate();
 
-        // Handle window resize
         window.addEventListener('resize', () => {
             cardEntries.forEach(e => resizeEntry(e));
         });
