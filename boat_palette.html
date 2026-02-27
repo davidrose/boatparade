@@ -373,7 +373,7 @@
             scene.background = null;
 
             const camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 500);
-            camera.position.set(3.0, 2.0, 3.5);
+            camera.position.set(3.0, 1.2, 3.5);
             camera.lookAt(0, 0.1, 0);
 
             const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -683,7 +683,7 @@
             }
 
             // Reset camera
-            entry.camera.position.set(3.0, 2.0, 3.5);
+            entry.camera.position.set(3.0, 1.2, 3.5);
             entry.camera.lookAt(0, 0.1, 0);
 
             entry.card.classList.remove('expanded');
