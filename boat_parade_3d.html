@@ -372,13 +372,17 @@
             <div id="loading-progress">0 / 16</div>
         </div>
 
-        <!-- Header -->
-        <div class="header">
+        <!-- Header Navigation & Info -->
+        <div id="header">
             <h1>LOOKOUT 3D Boat Parade</h1>
-            <div class="badge">THREE.JS</div>
-            <div class="boat-count" id="boat-count">Vessels: 0/16</div>
+            <div class="tech-badge">THREE.JS</div>
+            <div style="font-family: 'JetBrains Mono', monospace; color: #94a3b8; font-size: 13px; margin-left: auto;">
+                <span id="boat-count">Vessels: 0/16</span>
+            </div>
+            <div style="width: 1px; height: 24px; background: rgba(148, 163, 184, 0.2); margin: 0 8px;"></div>
+            <a href="boat_matcher.html"
+                style="color: #60a5fa; text-decoration: none; font-size: 14px; font-weight: 500;">Boat Matcher →</a>
         </div>
-
         <!-- Isolate Overlay -->
         <div id="isolate-overlay">
             <div id="isolate-title">Isolated View</div>
@@ -438,6 +442,42 @@
                 <div class="control-group">
                     <label>Amb Light: <span id="amb-light-val">0.1</span></label>
                     <input type="range" id="amb-light-slider" min="0" max="5" step="0.1" value="0.1">
+                </div>
+
+                <div style="border-top: 1px solid rgba(255,255,255,0.15); margin: 8px 0; padding-top: 8px;">
+                    <div
+                        style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 6px;">
+                        Material</div>
+                </div>
+                <div class="control-group">
+                    <label>Translucency: <span id="mat-trans-val">0.35</span></label>
+                    <input type="range" id="mat-trans-slider" min="0" max="1" step="0.05" value="0.35">
+                </div>
+                <div class="control-group">
+                    <label>Roughness: <span id="mat-rough-val">0.25</span></label>
+                    <input type="range" id="mat-rough-slider" min="0" max="1" step="0.05" value="0.25">
+                </div>
+                <div class="control-group">
+                    <label>Clearcoat: <span id="mat-coat-val">0.30</span></label>
+                    <input type="range" id="mat-coat-slider" min="0" max="1" step="0.05" value="0.30">
+                </div>
+
+                <div style="border-top: 1px solid rgba(255,255,255,0.15); margin: 8px 0; padding-top: 8px;">
+                    <div
+                        style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 6px;">
+                        Environment</div>
+                </div>
+                <div class="control-group">
+                    <label>Fog: <span id="env-fog-val">0.08</span></label>
+                    <input type="range" id="env-fog-slider" min="0" max="1" step="0.01" value="0.08">
+                </div>
+                <div class="control-group">
+                    <label>Time of Day: <span id="env-tod-val">50</span>%</label>
+                    <input type="range" id="env-tod-slider" min="0" max="100" step="1" value="50">
+                </div>
+                <div class="control-group">
+                    <label>Sun Intensity: <span id="env-sun-val">1.0</span></label>
+                    <input type="range" id="env-sun-slider" min="0" max="5" step="0.1" value="1.0">
                 </div>
             </div>
         </div>
@@ -588,6 +628,14 @@
         let isoAutoRotate = true;
         let selectedCloneIndex = -1;
         let originalCameraState = { pos: new THREE.Vector3(), target: new THREE.Vector3(), fov: 55 };
+
+        // Material & environment slider state
+        let matTransmission = 0.35;
+        let matRoughness = 0.25;
+        let matClearcoat = 0.30;
+        let envFogDensity = 0.0008;
+        let envTimeOfDay = 50;  // 0=midnight, 50=overcast, 100=bright noon
+        let envSunIntensity = 1.0;
         let defaultVFov = 55; // default vertical fov
 
         // ── Init ────────────────────────────────────────────
@@ -600,7 +648,8 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
             renderer.toneMappingExposure = 0.8;
-            renderer.shadowMap.enabled = false;
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             container.appendChild(renderer.domElement);
 
             // Scene
@@ -654,6 +703,7 @@
             });
             water.rotation.x = -Math.PI / 2;
             water.position.y = 0;
+            water.receiveShadow = true;
             scene.add(water);
 
             // 10m × 10m Grid on water surface — extends to horizon
@@ -682,6 +732,16 @@
 
             const dirLight = new THREE.DirectionalLight(0xffffff, 2.3);
             dirLight.position.set(200, 500, 200);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 1;
+            dirLight.shadow.camera.far = 2000;
+            dirLight.shadow.camera.left = -500;
+            dirLight.shadow.camera.right = 500;
+            dirLight.shadow.camera.top = 500;
+            dirLight.shadow.camera.bottom = -500;
+            dirLight.shadow.bias = -0.001;
             scene.add(dirLight);
 
             // Expose main lights globally for the UI sliders
@@ -822,6 +882,109 @@
                 if (window.isolatedAmbientLight) window.isolatedAmbientLight.intensity = val; // Keep isolated view synced
             });
 
+            // ── Material sliders ──
+            document.getElementById('mat-trans-slider').addEventListener('input', (e) => {
+                matTransmission = parseFloat(e.target.value);
+                document.getElementById('mat-trans-val').textContent = matTransmission.toFixed(2);
+                boats.forEach(boat => {
+                    boat.mesh.traverse(child => {
+                        if (child.isMesh && child.material && child.material.isMeshPhysicalMaterial) {
+                            child.material.transmission = matTransmission;
+                            child.material.needsUpdate = true;
+                        }
+                    });
+                });
+            });
+            document.getElementById('mat-rough-slider').addEventListener('input', (e) => {
+                matRoughness = parseFloat(e.target.value);
+                document.getElementById('mat-rough-val').textContent = matRoughness.toFixed(2);
+                boats.forEach(boat => {
+                    boat.mesh.traverse(child => {
+                        if (child.isMesh && child.material && child.material.isMeshPhysicalMaterial) {
+                            child.material.roughness = matRoughness;
+                            child.material.needsUpdate = true;
+                        }
+                    });
+                });
+            });
+            document.getElementById('mat-coat-slider').addEventListener('input', (e) => {
+                matClearcoat = parseFloat(e.target.value);
+                document.getElementById('mat-coat-val').textContent = matClearcoat.toFixed(2);
+                boats.forEach(boat => {
+                    boat.mesh.traverse(child => {
+                        if (child.isMesh && child.material && child.material.isMeshPhysicalMaterial) {
+                            child.material.clearcoat = matClearcoat;
+                            child.material.needsUpdate = true;
+                        }
+                    });
+                });
+            });
+
+            // ── Environment sliders ──
+            document.getElementById('env-fog-slider').addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('env-fog-val').textContent = val.toFixed(2);
+                // Map slider 0-1 to fog density 0 - 0.01
+                envFogDensity = val * 0.01;
+                if (scene.fog) scene.fog.density = envFogDensity;
+            });
+
+            document.getElementById('env-tod-slider').addEventListener('input', (e) => {
+                envTimeOfDay = parseInt(e.target.value);
+                document.getElementById('env-tod-val').textContent = envTimeOfDay;
+                // Interpolate between night (0) → overcast (50) → bright day (100)
+                const t = envTimeOfDay / 100;
+                // Background color: dark navy → overcast gray → bright sky blue
+                const nightColor = new THREE.Color(0x0a0e1a);
+                const overcastColor = new THREE.Color(0x8899aa);
+                const dayColor = new THREE.Color(0xb0d4f1);
+                let bgColor;
+                if (t <= 0.5) {
+                    bgColor = nightColor.clone().lerp(overcastColor, t * 2);
+                } else {
+                    bgColor = overcastColor.clone().lerp(dayColor, (t - 0.5) * 2);
+                }
+                scene.background = bgColor;
+                if (scene.fog) scene.fog.color.copy(bgColor);
+
+                // Ambient light: dim at night, normal at day
+                const ambIntensity = THREE.MathUtils.lerp(0.02, 0.5, t);
+                if (window.ambientLight) window.ambientLight.intensity = ambIntensity;
+
+                // Dir light: off at night, strong at day
+                const dirIntensity = THREE.MathUtils.lerp(0.0, 3.5 * envSunIntensity, t);
+                if (window.dirLight) window.dirLight.intensity = dirIntensity;
+
+                // Water color: dark at night, normal at day
+                if (water && water.material.uniforms['waterColor']) {
+                    const nightWater = new THREE.Color(0x050a10);
+                    const dayWater = new THREE.Color(0x1a4a5a);
+                    const wColor = nightWater.clone().lerp(dayWater, t);
+                    water.material.uniforms['waterColor'].value = wColor;
+                }
+            });
+
+            document.getElementById('env-sun-slider').addEventListener('input', (e) => {
+                envSunIntensity = parseFloat(e.target.value);
+                document.getElementById('env-sun-val').textContent = envSunIntensity.toFixed(1);
+                const t = envTimeOfDay / 100;
+                // Directional light intensity scaled by both time of day and sun slider
+                const dirIntensity = THREE.MathUtils.lerp(0.0, 3.5 * envSunIntensity, t);
+                if (window.dirLight) window.dirLight.intensity = dirIntensity;
+                // Headlight intensity
+                if (window.headLight) window.headLight.intensity = 4.0 * envSunIntensity;
+                // Water distortion (more glare = more distortion)
+                if (water && water.material.uniforms['distortionScale']) {
+                    water.material.uniforms['distortionScale'].value = 4.0 + envSunIntensity * 8.0;
+                }
+                // Water sun color brightness
+                if (water && water.material.uniforms['sunColor']) {
+                    const baseSunColor = new THREE.Color(0xdde0e4);
+                    baseSunColor.multiplyScalar(envSunIntensity);
+                    water.material.uniforms['sunColor'].value = baseSunColor;
+                }
+            });
+
             // HFOV slider (parade view)
             let currentHFOV = 55;
             document.getElementById('hfov-slider').addEventListener('input', (e) => {
@@ -871,9 +1034,10 @@
         function onPointerDown(event) {
             if (isIsolated) return; // already isolated, ignore standard clicks
 
-            // Calculate mouse position in normalized device coordinates
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            // Calculate mouse position relative to the canvas rather than the full window
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
             raycaster.setFromCamera(mouse, camera);
 
@@ -892,7 +1056,15 @@
             const intersects = raycaster.intersectObjects(clickableMeshes, false);
             if (intersects.length > 0) {
                 // Clicked a boat — find by original index, not array position
-                const clickedIndex = intersects[0].object.userData.boatIndex;
+                let clickedIndex = intersects[0].object.userData.boatIndex;
+                if (clickedIndex === undefined) {
+                    // Traverse up if needed
+                    let parent = intersects[0].object.parent;
+                    while (parent && clickedIndex === undefined) {
+                        clickedIndex = parent.userData.boatIndex;
+                        parent = parent.parent;
+                    }
+                }
                 const clickedBoat = boats.find(b => b.index === clickedIndex);
                 if (clickedBoat) {
                     enterIsolatedMode(clickedBoat);
@@ -918,7 +1090,7 @@
                 });
                 breadcrumbs.forEach(bc => bc.mesh.visible = false);
                 document.querySelector('.controls-panel').style.display = 'none';
-                document.querySelector('.header').style.display = 'none';
+                document.getElementById('header').style.display = 'none';
                 document.querySelector('.info-panel').style.display = 'none';
                 document.getElementById('isolate-overlay').classList.add('active');
                 document.getElementById('isolate-fov').style.display = 'block';
@@ -1546,8 +1718,8 @@
 
                         model.traverse((child) => {
                             if (child.isMesh) {
-                                child.castShadow = false;
-                                child.receiveShadow = false;
+                                child.castShadow = true;
+                                child.receiveShadow = true;
                                 child.material = boatMaterial;
 
                                 // Hide flat ground-plane meshes baked into GLB models

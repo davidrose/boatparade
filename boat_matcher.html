@@ -1,0 +1,2436 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOOKOUT Boat Matcher</title>
+
+    <script>
+        window.onerror = function (msg, url, file, line, error) {
+            alert('GLOBAL ERROR: ' + msg + '\n' + (error ? error.stack : ''));
+        };
+        window.addEventListener('unhandledrejection', function (e) {
+            alert('UNHANDLED REJECTION: ' + (e.reason ? e.reason.stack || e.reason : e));
+        });
+    </script>
+
+    <!-- TensorFlow.js & COCO-SSD for in-browser object detection -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+
+    <!-- UI Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-dark: #222222;
+            --panel-bg: rgba(34, 34, 34, 0.7);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #60a5fa;
+            --danger: #ef4444;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Top Header */
+        #header {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 16px 24px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            /* Draggable Labels */
+        }
+
+        .interactive-label {
+            position: fixed;
+            z-index: 1000;
+            cursor: ns-resize;
+            user-select: none;
+            display: none;
+            background: rgba(30, 30, 30, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(4px);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #fff;
+            white-space: nowrap;
+            transform: translateX(-50%);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+
+        .interactive-label:hover {
+            border-color: var(--accent);
+            background: rgba(50, 50, 50, 0.9);
+        }
+
+        /* Specific override for the Size label to be more prominent and drag horizontally */
+        #label-size-2d,
+        #label-size-3d {
+            cursor: ew-resize;
+            background: rgba(59, 130, 246, 0.85);
+            /* blue */
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            font-size: 16px;
+            font-weight: 600;
+            padding: 6px 14px;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+        }
+
+        #label-size-2d:hover,
+        #label-size-3d:hover {
+            background: rgba(59, 130, 246, 1.0);
+        }
+
+        /* Specific style for Pixel count (non interactive) */
+        #label-px-2d,
+        #label-px-3d {
+            cursor: default;
+            font-family: monospace;
+            background: rgba(30, 30, 30, 0.9);
+            color: #ccc;
+        }
+
+        #dist-ruler-line {
+            position: absolute;
+            width: 1px;
+            border-left: 2px dashed rgba(255, 255, 255, 0.4);
+            z-index: 999;
+            display: none;
+            pointer-events: none;
+        }
+
+        .action-button {
+            margin-top: 24px;
+            width: 100%;
+            padding: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-success {
+            background-color: #10b981;
+            color: white;
+            border-color: #059669;
+        }
+
+        .btn-success:hover {
+            background-color: #059669;
+        }
+
+        #header h1 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-link:hover {
+            color: var(--text-main);
+        }
+
+        /* Main Viewer Container */
+        #main-viewer {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background-color: #1e1e1e;
+            overflow: hidden;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #samples-container {
+            position: absolute;
+            top: 70px;
+            left: 20px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: rgba(30, 30, 30, 0.85);
+            padding: 12px;
+            border-radius: 12px;
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .samples-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .sample-img {
+            width: 120px;
+            height: 70px;
+            object-fit: cover;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+
+        .sample-img:hover {
+            border-color: var(--accent);
+            transform: scale(1.05);
+        }
+
+        #drop-zone {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: #262626;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        #drop-zone.empty-state {
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            margin: 20px;
+            border-radius: 12px;
+            background: transparent;
+        }
+
+        #drop-zone.dragover {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: var(--accent);
+        }
+
+        #drop-text {
+            text-align: center;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        #drop-text svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        #drop-text h2 {
+            margin: 0 0 8px 0;
+            font-size: 18px;
+            color: var(--text-main);
+        }
+
+        #image-canvas {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            object-fit: contain;
+        }
+
+        #image-overlay {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        /* No Right Panel anymore */
+
+        /* Controls Panel (Right side) */
+        #controls-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 340px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            color: var(--text-main);
+            z-index: 100;
+        }
+
+        #controls-panel h3 {
+            margin: 0 0 16px 0;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #cbd5e1;
+        }
+
+        .control-group {
+            margin-bottom: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-size: 13px;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .control-group span {
+            color: var(--accent);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .control-group select {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 8px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .control-group select:focus {
+            border-color: var(--accent);
+        }
+
+        .control-group input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .control-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .control-group input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        /* Output Metrics */
+        .metrics-box {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 20px;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .metric:last-child {
+            margin-bottom: 0;
+        }
+
+        .metric .lbl {
+            color: var(--text-muted);
+        }
+
+        .metric .val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            font-weight: 600;
+            color: #22c55e;
+        }
+
+        .metric .val.pending {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* Status Toast */
+        #status-toast {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: var(--accent);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 200;
+        }
+
+        /* Loading Spinner */
+        .loader {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid var(--accent);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: none;
+            margin: 0 auto 12px auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .merge-btn {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 500;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: white;
+            border: 1px solid var(--accent);
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(59, 130, 246, 0);
+        }
+
+        .merge-btn:hover {
+            background: var(--accent);
+            transform: translate(-50%, -50%) scale(1.05);
+            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4), 0 0 0 2px rgba(59, 130, 246, 0.5);
+        }
+
+        .merge-btn.active {
+            background: var(--danger);
+            border-color: #f87171;
+        }
+
+        .merge-btn.active:hover {
+            background: #f87171;
+            box-shadow: 0 8px 32px rgba(239, 68, 68, 0.4), 0 0 0 2px rgba(239, 68, 68, 0.5);
+        }
+
+        /* 3D Palette (Draggable Floating Window) */
+        #palette-window {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 340px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+
+        #palette-header {
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-main);
+            user-select: none;
+        }
+
+        #palette-header:active {
+            cursor: grabbing;
+        }
+
+        #palette-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            padding: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        /* Custom Scrollbar for Palette */
+        #palette-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #palette-container::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        #palette-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        .palette-item {
+            position: relative;
+            height: 60px;
+            /* smaller buttons */
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 4px;
+        }
+
+        .palette-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .palette-item.active {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: #3b82f6;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.3) inset;
+        }
+
+        .palette-num {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            font-size: 10px;
+            font-family: monospace;
+            color: rgba(255, 255, 255, 0.5);
+            background: rgba(0, 0, 0, 0.5);
+            padding: 2px 4px;
+            border-radius: 4px;
+            z-index: 2;
+        }
+
+        .palette-label {
+            font-size: 10px;
+            color: #fff;
+            text-align: center;
+            z-index: 2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <div id="header">
+        <h1>LOOKOUT Boat Matcher</h1>
+        <div style="width: 1px; height: 24px; background: var(--border-color);"></div>
+        <a href="boat_parade_3d.html" class="nav-link">← Back to Parade</a>
+    </div>
+
+    <!-- Status Toast & API Key -->
+    <div id="status-toast" style="bottom: 20px;">Ready</div>
+
+    <!-- Center Merge Button -->
+    <button id="btn-merge" class="merge-btn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7M15 21h6v-6M21 21l-7-7" />
+        </svg>
+        <span>Merge Overlay</span>
+    </button>
+
+    <!-- Global Horizontal Match Lines -->
+    <div id="global-horizon-line"
+        style="display:none; position:fixed; left:0; width:100vw; height:2px; background:rgba(0,0,0,0.5); border-top: 1px dashed rgba(255,255,255,0.8); z-index:9998; cursor: ns-resize; pointer-events: auto;">
+        <span
+            style="position: absolute; right: 20px; top: -20px; color: white; background: rgba(0,0,0,0.5); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-family: sans-serif; pointer-events: none;">HORIZON</span>
+    </div>
+    <div id="global-line-top"
+        style="display:none; position:fixed; left:0; width:100vw; height:1px; background:rgba(255,255,255,0.4); z-index:9999; pointer-events:none;">
+    </div>
+    <div id="global-line-bottom"
+        style="display:none; position:fixed; left:0; width:100vw; height:1px; background:rgba(255,255,255,0.4); z-index:9999; pointer-events:none;">
+    </div>
+
+    <!-- Interactive Labels (Isolated Style) -->
+    <!-- These are now moved inside #right-panel -->
+
+    <!-- 3D Palette Container (Draggable Window) -->
+    <div id="palette-window" style="display: none;">
+        <div id="palette-header">
+            <span>Select Boat Model</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="opacity: 0.5;">
+                <path d="M5 9h14M5 15h14" />
+            </svg>
+        </div>
+        <div id="palette-container"></div>
+    </div>
+
+    <!-- Main Layout -->
+    <div id="main-viewer">
+        <input type="file" id="file-input" accept="image/*" style="display: none;">
+
+        <div id="samples-container">
+            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <span style="color: #cbd5e1; font-size: 13px; font-weight: 500;">Try a sample:</span>
+                <button id="btn-upload-new" class="btn">
+                    UPLOAD NEW
+                </button>
+            </div>
+            <div class="samples-row">
+                <img src="samples/boat1.jpg" class="sample-img" onclick="loadSample('samples/boat1.jpg')">
+                <img src="samples/boat2.jpg" class="sample-img" onclick="loadSample('samples/boat2.jpg')">
+                <img src="samples/boat3.jpg" class="sample-img" onclick="loadSample('samples/boat3.jpg')">
+                <img src="samples/boat4.jpg" class="sample-img" onclick="loadSample('samples/boat4.jpg')">
+            </div>
+        </div>
+
+        <div id="drop-zone" class="empty-state">
+            <div id="drop-text" style="text-align: center; color: var(--text-muted); z-index: 10;">
+                <div class="loader" id="ai-loader"></div>
+                <h2 id="drop-heading">Drop an image here</h2>
+                <p>or click to browse</p>
+            </div>
+
+            <!-- Image goes here -->
+            <canvas id="image-canvas"></canvas>
+
+            <!-- AI Bounding Boxes overlay -->
+            <canvas id="image-overlay"></canvas>
+
+            <!-- Floating Metrics (Initially hidden, shown when boat is selected) -->
+            <div id="floating-metrics"
+                style="display: none; position: absolute; background: rgba(0,0,0,0.8); border: 1px solid #22c55e; border-radius: 6px; padding: 6px 10px; color: white; font-family: 'JetBrains Mono', monospace; font-size: 13px; z-index: 50; flex-direction: column; gap: 4px; pointer-events: none; transform: translate(-50%, -100%); margin-top: -10px;">
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span style="color: #a1a1aa;">Pixels:</span>
+                    <strong style="color: #22c55e;" id="out-px">--</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span style="color: #a1a1aa;">Length:</span>
+                    <strong style="color: #60a5fa;" id="out-len">--</strong>
+                </div>
+                <div
+                    style="display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid rgba(255,255,255,0.2); margin-top: 2px; padding-top: 2px;">
+                    <span style="color: #a1a1aa;">Dist:</span>
+                    <strong style="color: #ef4444;" id="out-dist">--</strong>
+                </div>
+            </div>
+
+            <!-- Single Global Canvas for the 3D projection overlay -->
+            <div id="canvas-container"
+                style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 20;">
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <!-- Import Three.js -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { Water } from 'three/addons/objects/Water.js';
+
+        // ── Data from boat_parade_3d.html ──
+        const MODEL_FILES = [
+            'AIS_JetSkis-A_001.glb', 'AIS_Kayak-A_001.glb', 'AIS-BOAT_CenterConsole_A_001.glb', 'AIS-BOAT_CenterConsole_B_001.glb',
+            'AIS_Sailboat-Small-A_001.glb', 'AIS_Sailboat-Medium-A_001.glb', 'AIS_Sailboat-Large-A_001.glb', 'AIS_Sailboat-SuperSail-A_001.glb',
+            'AIS_Powerboat-A_001.glb', 'AIS_FishingBoat-A_001.glb', 'AIS_Yacht-A_001.glb',
+            'AIS_Ferry-A_001.glb', 'AIS_Military-A_001.glb', 'AIS_Tug-A_001.glb',
+            'AIS_Tanker-A_001.glb', 'AIS_CruiseShip-A_001.glb',
+        ];
+
+        const FRIENDLY_NAMES = [
+            'Jet Skis', 'Kayak', 'Center Console 30', 'Center Console 45',
+            'Sailboat (S)', 'Sailboat (M)', 'Sailboat (L)', 'Super Sail',
+            'Powerboat 20', 'Fishing Boat', 'Yacht',
+            'Ferry', 'Military Cutter', 'Tug',
+            'Tanker', 'Cruise Ship',
+        ];
+
+        const VESSEL_SCALES = {
+            'Center Console 30': 9.14, 'Center Console 45': 13.7, 'Cruise Ship': 304.8, 'Ferry': 100.6,
+            'Fishing Boat': 15.2, 'Jet Skis': 3, 'Kayak': 3.05, 'Military Cutter': 100.6,
+            'Powerboat 20': 6.1, 'Sailboat (L)': 12.2, 'Sailboat (M)': 7.6, 'Sailboat (S)': 4.6,
+            'Super Sail': 27.4, 'Tanker': 304.8, 'Tug': 24.4, 'Yacht': 18.3,
+        };
+
+        // ── Palette State ──
+        let paletteRenderer, paletteScene, paletteCamera;
+        let paletteItemsData = []; // { element: DOMElement, mesh: Object3D, name: string }
+
+        // ── App State ──
+        let loadedModels = {}; // store actual cached 3D scenes
+        let currentModelMesh = null;
+        let currentBoatName = '';
+        let currentBoatLength = 0;
+        let hasConfirmedMatch = false;
+
+        // 2D Image State
+        let imageElement = new Image();
+        let boxPixelWidth = 0; // The detected width in image pixels
+        let rawImageWidth = 0; // The original full image width in pixels
+
+        // Distance Vars
+        let cameraHFOV = 55;
+        let matchHeading = 0; // degrees
+        let estimatedDistance = 0;
+
+        // Auto Match bounding box
+        let currentBBox = null;
+        let isOverlayMode = false;
+        let boxHelper = null;
+        let globalFocalLengthPx = 1000;
+
+        // ── Init AI (COCO-SSD) ──
+        let cocoModel = null;
+        async function loadCocoModel() {
+            showStatus('Loading COCO-SSD model...');
+            cocoModel = await cocoSsd.load();
+            showStatus('AI model ready!', 3000);
+        }
+        loadCocoModel();
+
+        // ── 3D Scene Setup ──
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = null; // Transparent background for overlay
+
+        // Required for overlay mode
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setClearColor(0x000000, 0);
+
+        const camera = new THREE.PerspectiveCamera(55, container.clientWidth / container.clientHeight, 0.1, 5000);
+        camera.position.set(30, 15, 40);
+
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.0;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.target.set(0, 0, 0);
+
+        // Env maps
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        pmremGenerator.compileEquirectangularShader();
+        scene.environment = pmremGenerator.fromScene(new THREE.Scene()).texture;
+        pmremGenerator.dispose();
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+        dirLight.position.set(100, 200, 100);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 1;
+        dirLight.shadow.camera.far = 1000;
+        dirLight.shadow.camera.left = -100;
+        dirLight.shadow.camera.right = 100;
+        dirLight.shadow.camera.top = 100;
+        dirLight.shadow.camera.bottom = -100;
+        scene.add(dirLight);
+
+        // Water
+        const waterGeo = new THREE.PlaneGeometry(1000, 1000);
+        const water = new Water(waterGeo, {
+            textureWidth: 512,
+            textureHeight: 512,
+            waterNormals: new THREE.TextureLoader().load(
+                'https://threejs.org/examples/textures/waternormals.jpg',
+                function (texture) { texture.wrapS = texture.wrapT = THREE.RepeatWrapping; }
+            ),
+            sunDirection: new THREE.Vector3(1, 1, 1).normalize(),
+            sunColor: 0xffffff,
+            waterColor: 0x1a4a5a,
+            distortionScale: 3.7,
+        });
+        water.rotation.x = -Math.PI / 2;
+        water.receiveShadow = true;
+        scene.add(water);
+
+        // Group to hold the active 3D boat
+        const boatContainer = new THREE.Group();
+        scene.add(boatContainer);
+
+        // 3D Heading Arrow
+        const arrowDir = new THREE.Vector3(0, 0, 1); // Pointing +Z
+        const arrowOrigin = new THREE.Vector3(0, 2, 0); // elevated
+        const arrowHelper3D = new THREE.ArrowHelper(arrowDir, arrowOrigin, 15, 0xffffff, 4, 3);
+        boatContainer.add(arrowHelper3D);
+
+        // ── Load 3D Models ──
+        const gltfLoader = new GLTFLoader();
+        let modelsLoadedCount = 0;
+
+        // ── Horizon Drag Logic ──
+        (function initHorizonDrag() {
+            const hLine = document.getElementById('global-horizon-line');
+            if (!hLine) return;
+            let isDragging = false;
+
+            hLine.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                document.body.style.cursor = 'ns-resize';
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const y = e.clientY;
+                hLine.style.top = y + 'px';
+
+                // Sync with 3D camera
+                // We need to map screen Y to camera elevation.
+                // For simplicity, let's assume a mapping or just update the global eyeLevel.
+                // In a real perspective match, this is complex, but we'll approximate:
+                if (camera) {
+                    // This is a rough heuristic: move camera up/down
+                    const delta = (window.innerHeight / 2 - y) * 0.1;
+                    camera.position.y = 2 + delta;
+                    camera.lookAt(0, camera.position.y, -1);
+                    drawOverlay(lastPredictions);
+                }
+            });
+
+            window.addEventListener('mouseup', () => {
+                isDragging = false;
+                document.body.style.cursor = 'default';
+            });
+        })();
+
+        // ── Palette Drag Logic ──
+        (function initPaletteDrag() {
+            const win = document.getElementById('palette-window');
+            const header = document.getElementById('palette-header');
+            if (!win || !header) return;
+
+            let isDragging = false;
+            let offsetX = 0;
+            let offsetY = 0;
+
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                const rect = win.getBoundingClientRect();
+                offsetX = e.clientX - rect.left;
+                offsetY = e.clientY - rect.top;
+                header.style.cursor = 'grabbing';
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                win.style.right = 'auto'; // Disable right-lock
+                win.style.bottom = 'auto';
+                win.style.left = (e.clientX - offsetX) + 'px';
+                win.style.top = (e.clientY - offsetY) + 'px';
+            });
+
+            window.addEventListener('mouseup', () => {
+                isDragging = false;
+                header.style.cursor = 'grab';
+            });
+        })();
+
+        function loadFleet() {
+            FRIENDLY_NAMES.forEach((name, i) => {
+                const path = `models/${MODEL_FILES[i]}`;
+                gltfLoader.load(path, (loadedGltf) => {
+                    const model = loadedGltf.scene;
+
+                    // Scale it
+                    const targetLen = VESSEL_SCALES[name] || 8;
+                    const box = new THREE.Box3().setFromObject(model);
+                    const size = new THREE.Vector3();
+                    box.getSize(size);
+                    const scaleFactor = targetLen / Math.max(size.x, size.y, size.z);
+                    model.scale.setScalar(scaleFactor);
+
+                    // Center X/Z and snap Y to 0
+                    box.setFromObject(model);
+                    const center = new THREE.Vector3();
+                    box.getCenter(center);
+                    model.position.x -= center.x;
+                    model.position.z -= center.z;
+                    model.position.y -= box.min.y;
+
+                    // Apply nice material (translucent)
+                    const physMat = new THREE.MeshPhysicalMaterial({
+                        color: 0xe8f0ff,
+                        roughness: 0.25,
+                        metalness: 0.05,
+                        transmission: 0.1, // slightly less translucent for matcher view
+                        clearcoat: 0.3,
+                        envMapIntensity: 1.0,
+                        transparent: true,
+                        opacity: 0.85
+                    });
+
+                    model.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            child.material = physMat;
+                            // Hide ground planes
+                            const n = (child.name || '').toLowerCase();
+                            if (n.includes('plane') || n.includes('floor') || n.includes('shadow') || n.includes('water') || n.includes('wake')) child.visible = false;
+
+                            // Hide any geometry that's just a flat plane
+                            if (child.isMesh && child.geometry) {
+                                if (child.geometry.type === 'PlaneGeometry') {
+                                    child.visible = false;
+                                } else if (!child.geometry.boundingBox) {
+                                    child.geometry.computeBoundingBox();
+                                }
+
+                                if (child.geometry.boundingBox) {
+                                    const box = child.geometry.boundingBox;
+                                    const height = box.max.y - box.min.y;
+                                    // If it's extremely flat in its local geometry, it is the shadow plane/wake
+                                    if (height < 0.1) {
+                                        child.visible = false;
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    // Store it
+                    loadedModels[name] = model;
+
+                    // Also populate the palette scene
+                    const pItem = paletteItemsData.find(item => item.name === name);
+                    if (pItem && pItem.scene) {
+                        const paletteMesh = model.clone();
+
+                        // Normalize scale so the model always fills ~1 unit bounding box
+                        const pBox = new THREE.Box3().setFromObject(paletteMesh);
+                        const pSize = new THREE.Vector3();
+                        pBox.getSize(pSize);
+                        const maxDim = Math.max(pSize.x, pSize.y, pSize.z);
+                        paletteMesh.scale.setScalar(1.0 / maxDim);
+
+                        // Re-center/snap: center X/Z on origin, sit bottom at y=0
+                        const pBox2 = new THREE.Box3().setFromObject(paletteMesh);
+                        const pCenter = new THREE.Vector3();
+                        pBox2.getCenter(pCenter);
+                        paletteMesh.position.x -= pCenter.x;
+                        paletteMesh.position.z -= pCenter.z;
+                        paletteMesh.position.y -= pBox2.min.y; // snap bottom to y=0
+
+                        pItem.scene.add(paletteMesh);
+                        pItem.mesh = paletteMesh;
+                    }
+
+                    modelsLoadedCount++;
+
+                    // Update UI
+                    if (modelsLoadedCount === FRIENDLY_NAMES.length) {
+                        showStatus("3D Models Loaded", 2000);
+                        // Auto-select first boat
+                        selectPaletteItem(0);
+                    }
+                });
+            });
+        }
+
+        function initPalette() {
+            const canvas = document.getElementById('palette-canvas');
+            // NOTE: do NOT call setPixelRatio here – we keep everything in CSS pixels
+            // so that getBoundingClientRect() values can be passed directly to
+            // setViewport / setScissor without any dpr scaling.
+            paletteRenderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+
+            // Shared camera for all palette slots
+            paletteCamera = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
+            paletteCamera.position.set(0, 0.6, 2.8);
+            paletteCamera.lookAt(0, 0.3, 0);
+
+            const container = document.getElementById('palette-container');
+            const mapKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'Q', 'W', 'E', 'R', 'T', 'Y'];
+
+            for (let i = 0; i < FRIENDLY_NAMES.length; i++) {
+                const name = FRIENDLY_NAMES[i];
+                const keyHtml = i < mapKeys.length ? `<div class="palette-num">${mapKeys[i]}</div>` : '';
+
+                const el = document.createElement('div');
+                el.className = 'palette-item';
+                el.innerHTML = `
+                    ${keyHtml}
+                    <div class="palette-label">${name}</div>
+                `;
+
+                el.addEventListener('click', () => {
+                    selectPaletteItem(i);
+                });
+
+                container.appendChild(el);
+
+                // Per-item scene with lights
+                const pScene = new THREE.Scene();
+                const pHemi = new THREE.HemisphereLight(0xffffff, 0x334455, 2.5);
+                pScene.add(pHemi);
+                const pDir = new THREE.DirectionalLight(0xffffff, 2.0);
+                pDir.position.set(3, 5, 3);
+                pScene.add(pDir);
+                const pDir2 = new THREE.DirectionalLight(0xaaccff, 0.8);
+                pDir2.position.set(-3, 2, -2);
+                pScene.add(pDir2);
+
+                paletteItemsData.push({
+                    element: el,
+                    name: name,
+                    scene: pScene,
+                    mesh: null // Filled after loadFleet
+                });
+            }
+
+            // Keyboard Shortcuts
+            window.addEventListener('keydown', (e) => {
+                const key = e.key.toUpperCase();
+                const idx = mapKeys.indexOf(key);
+                if (idx !== -1 && idx < paletteItemsData.length) {
+                    selectPaletteItem(idx);
+                }
+            });
+
+            // Make Palette Drag-Scrollable with Mouse
+            let isDown = false;
+            let startX;
+            let scrollLeft;
+
+            container.addEventListener('mousedown', (e) => {
+                // ignore clicks on the items themselves so selection isn't blocked, 
+                // but let it bubble or handle if needed.
+                isDown = true;
+                container.style.cursor = 'grabbing';
+                startX = e.pageX - container.offsetLeft;
+                scrollLeft = container.scrollLeft;
+            });
+            window.addEventListener('mouseup', () => {
+                isDown = false;
+                container.style.cursor = '';
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (!isDown) return;
+                e.preventDefault();
+                const x = e.pageX - container.offsetLeft;
+                const walk = (x - startX) * 2; // Speed multiplier
+                container.scrollLeft = scrollLeft - walk;
+            });
+        }
+
+        function selectPaletteItem(index) {
+            if (index < 0 || index >= paletteItemsData.length) return;
+            const item = paletteItemsData[index];
+
+            document.querySelectorAll('.palette-item').forEach(el => el.classList.remove('active'));
+            item.element.classList.add('active');
+
+            selectModel(item.name);
+        }
+
+        function selectModel(name) {
+            if (!loadedModels[name]) return;
+
+            // clear old
+            while (boatContainer.children.length > 0) {
+                boatContainer.remove(boatContainer.children[0]);
+            }
+
+            currentBoatName = name;
+            currentBoatLength = VESSEL_SCALES[name];
+
+            // Add clone of new model
+            currentModelMesh = loadedModels[name].clone();
+            boatContainer.add(currentModelMesh);
+
+            // Add 3D Heading Arrow directly to the model so it rotates with it
+            const arrowDir = new THREE.Vector3(1, 0, 0); // Pointing +X (Forward relative to most models)
+            const arrowOrigin = new THREE.Vector3(0, currentBoatLength * 0.2, 0); // elevated based on size
+            const arrowHelper3D = new THREE.ArrowHelper(arrowDir, arrowOrigin, currentBoatLength * 0.6, 0xffffff, currentBoatLength * 0.15, currentBoatLength * 0.1);
+            currentModelMesh.add(arrowHelper3D);
+
+            // Add OBB (Oriented Bounding Box) helper to currentModelMesh so it rotates with it
+            const box3 = new THREE.Box3().setFromObject(currentModelMesh);
+            const size3 = new THREE.Vector3();
+            box3.getSize(size3);
+            const center3 = new THREE.Vector3();
+            box3.getCenter(center3);
+
+            // Adjust position relative to the mesh (which is already centered and at y=0)
+            const boxGeo = new THREE.BoxGeometry(size3.x, size3.y, size3.z);
+            const edges = new THREE.EdgesGeometry(boxGeo);
+            const obbLine = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 }));
+
+            // The unrotated model is placed such that its bounding box center is at (0, size3.y / 2, 0)
+            obbLine.position.set(0, size3.y / 2, 0);
+            currentModelMesh.add(obbLine);
+
+            // Update UI
+            const currentBoatFeet = currentBoatLength * 3.28084;
+            document.getElementById('out-len').textContent = Math.round(currentBoatFeet) + ' ft';
+
+            resetConfirmState();
+            updateModelHeading();
+            calculateDistance();
+            frameUnmergedCamera();
+
+            // Show palette window once a model is interacted with/selected
+            document.getElementById('palette-window').style.display = 'flex';
+        }
+
+        // selectEl listener removed
+
+        // ── Auto-Select Heuristic ──
+        function autoSelectModel(w, h) {
+            if (!w || !h) return;
+            const aspect = w / h;
+            let targetModel = 'Center Console 30'; // default
+            let targetHeading = 0;
+
+            if (aspect < 0.6) {
+                targetModel = 'Sailboat (M)'; // tall box = sailboat
+                targetHeading = 0; // bow-on or stern-on
+            } else if (aspect > 2.5) {
+                targetModel = 'Ferry'; // very wide = ferry/ship
+                targetHeading = 90; // broadside
+            } else if (aspect > 1.2 && aspect <= 2.5) {
+                targetModel = 'Yacht';
+                targetHeading = 90; // broadside
+            } else {
+                targetModel = 'Center Console 30';
+                targetHeading = 45; // angled
+            }
+
+            if (loadedModels[targetModel]) {
+                selectModel(targetModel);
+                matchHeading = targetHeading;
+                updateModelHeading();
+            }
+        }
+
+        // ── Controls ──
+        function updateModelHeading() {
+            if (!currentModelMesh) return;
+            // Native heading is facing +X in many models, we want 0 = facing camera (+Z)
+            currentModelMesh.rotation.y = THREE.MathUtils.degToRad(-matchHeading);
+
+            calculateDistance();
+
+            if (imageElement.src && currentBBox) {
+                drawOverlay([{ bbox: currentBBox, class: 'boat', score: 1.0 }]);
+            }
+        }
+
+        // ── Interactive 2D Arrow Rotation ──
+        let isDraggingArrow = false;
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const imgCanvas = document.getElementById('image-canvas');
+        const overlayCanvas = document.getElementById('image-overlay');
+        const dropText = document.getElementById('drop-text');
+
+        overlayCanvas.addEventListener('mousedown', (e) => {
+            if (!currentBBox) return;
+            const rect = overlayCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const scale = overlayCanvas.width / rawImageWidth;
+            const rw = currentBBox[2] * scale;
+            const rh = currentBBox[3] * scale;
+            const cx = (currentBBox[0]) * scale + rw / 2;
+            const cy = (currentBBox[1]) * scale + rh / 2;
+
+            const dist = Math.hypot(x - cx, y - cy);
+            if (dist < Math.max(rw, rh)) {
+                isDraggingArrow = true;
+                updateHeadingFromMouse(x, y, cx, cy);
+            }
+        });
+
+        overlayCanvas.addEventListener('mousemove', (e) => {
+            if (!isDraggingArrow || !currentBBox || !imageElement.src) return;
+            const rect = overlayCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const scale = overlayCanvas.width / rawImageWidth;
+            const rw = currentBBox[2] * scale;
+            const rh = currentBBox[3] * scale;
+            const cx = (currentBBox[0]) * scale + rw / 2;
+            const cy = (currentBBox[1]) * scale + rh / 2;
+
+            updateHeadingFromMouse(x, y, cx, cy);
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDraggingArrow = false;
+        });
+
+        function updateHeadingFromMouse(x, y, cx, cy) {
+            const dx = x - cx;
+            const dy = y - cy;
+            let angleRad = Math.atan2(dy, dx);
+            let deg = angleRad * (180 / Math.PI) + 90;
+            if (deg < 0) deg += 360;
+            if (deg >= 360) deg -= 360;
+
+            headingSlider.value = Math.round(deg);
+            updateModelHeading();
+        }
+
+        const hfovSlider = document.getElementById('hfov-slider');
+        const hfovVal = document.getElementById('hfov-val');
+
+        hfovSlider.addEventListener('input', () => {
+            cameraHFOV = parseInt(hfovSlider.value);
+            hfovVal.textContent = cameraHFOV;
+            calculateDistance();
+        });
+
+        // ── Overlay/Merge Mode Logic ──
+        const btnConfirm = document.getElementById('btn-confirm');
+        const btnMerge = document.getElementById('btn-merge');
+        const mergeWrapper = document.getElementById('merge-wrapper');
+        const mergeText = btnMerge.querySelector('span');
+
+        btnConfirm.addEventListener('click', () => {
+            hasConfirmedMatch = true;
+            btnConfirm.classList.add('btn-success');
+            btnConfirm.innerHTML = '✓ Match Confirmed';
+            mergeWrapper.style.display = 'block';
+        });
+
+        function resetConfirmState() {
+            if (isOverlayMode) toggleMerge();
+            hasConfirmedMatch = false;
+            btnConfirm.classList.remove('btn-success');
+            btnConfirm.innerHTML = '1. Confirm Match & Size';
+            mergeWrapper.style.display = 'none';
+        }
+
+        btnMerge.addEventListener('click', toggleMerge);
+
+        function toggleMerge() {
+            if (!imageElement.src || !currentBBox || !imgCanvas.width) {
+                showStatus("Please wait for AI detection first.", 2000);
+                return;
+            }
+            if (!hasConfirmedMatch) {
+                showStatus("Please confirm the match first.", 2000);
+                return;
+            }
+
+            isOverlayMode = !isOverlayMode;
+            btnMerge.classList.toggle('active', isOverlayMode);
+            mergeText.textContent = isOverlayMode ? 'Unmerge Overlay' : 'Merge Overlay';
+            boxHelper.visible = isOverlayMode;
+
+            if (isOverlayMode) {
+                // Prepare transition
+                const rightPanel = document.getElementById('right-panel');
+                const rpRect = rightPanel.getBoundingClientRect();
+                const imgRect = imgCanvas.getBoundingClientRect();
+
+                // Set container to absolute fixed coordinates based on current position
+                container.style.position = 'fixed';
+                container.style.top = rpRect.top + 'px';
+                container.style.left = rpRect.left + 'px';
+                container.style.width = rpRect.width + 'px';
+                container.style.height = rpRect.height + 'px';
+                container.style.zIndex = '1000';
+                container.style.pointerEvents = 'none';
+
+                // Force browser layout
+                container.offsetHeight;
+
+                // Animate to image bounds
+                container.style.top = imgRect.top + 'px';
+                container.style.left = imgRect.left + 'px';
+                container.style.width = imgRect.width + 'px';
+                container.style.height = imgRect.height + 'px';
+
+                scene.background = null;
+                renderer.setClearColor(0x000000, 0);
+
+                // Update canvas resolution drawing rect (not CSS size) immediately to prevent distortion later
+                renderer.setSize(imgRect.width, imgRect.height, false);
+                camera.aspect = imgRect.width / imgRect.height;
+                camera.updateProjectionMatrix();
+
+                // Lock camera
+                controls.enabled = false;
+
+                document.getElementById('right-panel').style.transition = 'background-color 0.8s';
+                document.getElementById('right-panel').style.backgroundColor = 'transparent';
+
+                alignOverlayToBBox();
+                if (currentBBox) drawOverlay([{ bbox: currentBBox, class: 'boat', score: 1.0 }]);
+            } else {
+                // Return to right panel
+                const rightPanel = document.getElementById('right-panel');
+                const rpRect = rightPanel.getBoundingClientRect();
+
+                // Start transition
+                container.style.top = rpRect.top + 'px';
+                container.style.left = rpRect.left + 'px';
+                container.style.width = rpRect.width + 'px';
+                container.style.height = rpRect.height + 'px';
+
+                renderer.setSize(rpRect.width, rpRect.height, false);
+                camera.aspect = rpRect.width / rpRect.height;
+                camera.updateProjectionMatrix();
+
+                // Frame camera if not overlaid
+                if (!isOverlayMode) {
+                    frameUnmergedCamera();
+                }
+                updateModelHeading();
+                calculateDistance();
+                boatContainer.position.set(0, 0, 0);
+                boatContainer.updateMatrixWorld();
+                if (boxHelper) boxHelper.update();
+
+                // Wait for CSS transition (0.8s bezier) to finish before restoring relative layout
+                setTimeout(() => {
+                    if (isOverlayMode) return;
+                    extractAndApplyEnvironmentColors(); // Restore extracted sky background
+                    container.style.position = 'relative';
+                    container.style.top = '0';
+                    container.style.left = '0';
+                    container.style.width = '100%';
+                    container.style.height = '100%';
+                    container.style.pointerEvents = 'auto';
+
+                    document.getElementById('right-panel').style.backgroundColor = '#262626';
+
+                    const cw = container.clientWidth;
+                    const ch = container.clientHeight;
+                    renderer.setSize(cw, ch, false);
+                    controls.enabled = true;
+                }, 800);
+
+                if (currentBBox) drawOverlay([{ bbox: currentBBox, class: 'boat', score: 1.0 }]);
+            }
+        }
+
+        function frameUnmergedCamera() {
+            // Lock the camera to a nice framing distance based strictly on boat length
+            const frameDist = (currentBoatLength * 1.5) + 15;
+            const eyeLevel = Math.max(2, currentBoatLength * 0.2); // Low eye level like a real photograph
+            camera.position.set(30, eyeLevel, frameDist);
+            controls.target.set(0, eyeLevel, 0); // Keep Y identical to keep horizon perfectly flat
+            controls.update();
+        }
+
+        function alignOverlayToBBox() {
+            if (!isOverlayMode || !currentBBox || !imgCanvas.width) return;
+            const [x, y, w, h] = currentBBox;
+            const scale = imgCanvas.width / rawImageWidth;
+
+            // Center of bounding box on canvas
+            const cx = (x + w / 2) * scale;
+            const cy = (y + h / 2) * scale;
+
+            // Normalize device coordinates (-1 to +1)
+            const nx = (cx / imgCanvas.width) * 2 - 1;
+            const ny = -(cy / imgCanvas.height) * 2 + 1;
+
+            // Distance in meters
+            const dist = estimatedDistance || 10;
+
+            // Place model exactly on the view ray
+            const vec = new THREE.Vector3(nx, ny, 0.5);
+            vec.unproject(camera);
+            vec.sub(camera.position).normalize();
+            const targetPos = vec.multiplyScalar(dist);
+
+            boatContainer.position.copy(targetPos);
+            boatContainer.updateMatrixWorld(); // force update
+
+            if (globalFocalLengthPx > 0) {
+                const physicalW = boxPixelWidth * (dist / globalFocalLengthPx);
+                const physicalH = currentBBox[3] * (dist / globalFocalLengthPx);
+                boxHelper.scale.set(physicalW, physicalH, physicalW);
+            }
+            boxHelper.position.copy(targetPos);
+        }
+
+        // ── Resize ──
+        window.addEventListener('resize', () => {
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+
+            if (imageElement.src) {
+                drawOverlay(); // redraw box on resize
+            }
+        });
+
+        // ── Status Toast ──
+        function showStatus(msg, timeout = 0) {
+            const toast = document.getElementById('status-toast');
+            toast.textContent = msg;
+            toast.style.opacity = 1;
+            if (timeout > 0) {
+                setTimeout(() => { toast.style.opacity = 0; }, timeout);
+            }
+        }
+
+        // ── Drag & Drop 2D Image Logic ──
+        document.getElementById('btn-upload-new').addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('click', (e) => {
+            if (e.target.closest('.btn')) return; // ignore btn-merge click
+            if (!imageElement.src) fileInput.click();
+        });
+
+        // Prevent default on all drag events to ensure the browser doesn't block dropping
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            // also add to window just in case, since some browsers are stubborn
+            window.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                loadImageFile(e.dataTransfer.files[0]);
+            }
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                loadImageFile(e.target.files[0]);
+            }
+        });
+
+        function loadImageFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showStatus('Please drop an image file.', 3000);
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                handleNewImage(e.target.result);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        window.loadSample = function (url) {
+            handleNewImage(url);
+        };
+
+        function handleNewImage(src) {
+            if (isOverlayMode) {
+                toggleMerge(); // turn off before loading new
+            }
+            currentBBox = null;
+            imageElement.onload = () => {
+                dropZone.classList.remove('empty-state');
+                dropText.style.display = 'none';
+                imgCanvas.style.display = 'block';
+                overlayCanvas.style.display = 'block';
+                rawImageWidth = imageElement.naturalWidth;
+
+                // --- Extract Global Colors ---
+                extractAndApplyEnvironmentColors();
+
+                drawOverlay();
+                processImageWithAI();
+            };
+            imageElement.src = src;
+        }
+
+        function extractAndApplyEnvironmentColors() {
+            // Create a small temporary canvas to sample colors efficiently
+            const tempC = document.createElement('canvas');
+            tempC.width = 64;
+            tempC.height = 64;
+            const tCtx = tempC.getContext('2d', { willReadFrequently: true });
+            tCtx.drawImage(imageElement, 0, 0, 64, 64);
+
+            // Sample Top 20% for Sky (approximate)
+            let skyR = 0, skyG = 0, skyB = 0, skyCount = 0;
+            const skyData = tCtx.getImageData(0, 0, 64, 12).data;
+            for (let i = 0; i < skyData.length; i += 16) { // skip every 4th pixel for speed
+                skyR += skyData[i];
+                skyG += skyData[i + 1];
+                skyB += skyData[i + 2];
+                skyCount++;
+            }
+            const skyColor = new THREE.Color(skyR / skyCount / 255, skyG / skyCount / 255, skyB / skyCount / 255);
+
+            // Sample Bottom 20% for Water (approximate, ignoring bottom corners to avoid UI marks)
+            let wR = 0, wG = 0, wB = 0, wCount = 0;
+            const waterData = tCtx.getImageData(16, 52, 32, 12).data; // Middle bottom segment
+            for (let i = 0; i < waterData.length; i += 16) {
+                wR += waterData[i];
+                wG += waterData[i + 1];
+                wB += waterData[i + 2];
+                wCount++;
+            }
+            // Darken and saturate the water slightly so it looks good as a material
+            const waterColor = new THREE.Color(wR / wCount / 255, wG / wCount / 255, wB / wCount / 255);
+            const hsl = {};
+            waterColor.getHSL(hsl);
+            waterColor.setHSL(hsl.h, Math.min(1.0, hsl.s * 1.5), Math.max(0.1, hsl.l * 0.7));
+
+            // Apply to 3D Scene
+            scene.background = skyColor;
+            scene.fog = new THREE.Fog(skyColor, 100, 1000);
+            water.material.uniforms['waterColor'].value = waterColor;
+        }
+
+        let currentZoomScale = 1;
+        let currentZoomOffsetX = 0;
+        let currentZoomOffsetY = 0;
+
+        // Maintain aspect ratio for rendering canvas, with optional zoom focus
+        function drawOverlay(predictions = []) {
+            if (!imageElement.src) return;
+
+            const cw = dropZone.clientWidth; // full width
+            const ch = dropZone.clientHeight; // full height
+            const imgAspect = imageElement.naturalWidth / imageElement.naturalHeight;
+            const containerAspect = cw / ch;
+
+            // "contain" logic: fit entirely without cropping
+            let baseRenderW, baseRenderH;
+            if (imgAspect > containerAspect) {
+                baseRenderW = cw;
+                baseRenderH = cw / imgAspect;
+            } else {
+                baseRenderH = ch;
+                baseRenderW = ch * imgAspect;
+            }
+
+            // If we have a bounding box, zoom so the box occupies ~50% of the view height
+            if (currentBBox) {
+                const boxH = currentBBox[3];
+                const idealZoom = (imageElement.naturalHeight * 0.5) / boxH;
+                currentZoomScale = Math.min(Math.max(idealZoom, 1), 5); // cap zoom 1x-5x
+
+                // Pan to center the box
+                const boxCx = currentBBox[0] + currentBBox[2] / 2;
+                const boxCy = currentBBox[1] + currentBBox[3] / 2;
+
+                // Convert center to 0-1 percentage
+                const px = boxCx / imageElement.naturalWidth;
+                const py = boxCy / imageElement.naturalHeight;
+
+                // Calculate pixel offsets in baseRender coordinates
+                currentZoomOffsetX = (px * baseRenderW * currentZoomScale) - (cw / 2);
+                currentZoomOffsetY = (py * baseRenderH * currentZoomScale) - (ch / 2);
+
+                // Clamp to edges like background-size: cover
+                const maxOffX = Math.max(0, (baseRenderW * currentZoomScale) - cw);
+                const maxOffY = Math.max(0, (baseRenderH * currentZoomScale) - ch);
+                currentZoomOffsetX = Math.max(0, Math.min(currentZoomOffsetX, maxOffX));
+                currentZoomOffsetY = Math.max(0, Math.min(currentZoomOffsetY, maxOffY));
+
+            } else {
+                currentZoomScale = 1;
+                currentZoomOffsetX = 0;
+                currentZoomOffsetY = 0;
+            }
+
+            const renderW = baseRenderW * currentZoomScale;
+            const renderH = baseRenderH * currentZoomScale;
+
+            // Update DOM image dimensions
+            imgCanvas.width = renderW;
+            imgCanvas.height = renderH;
+            const ctx = imgCanvas.getContext('2d');
+            ctx.drawImage(imageElement, 0, 0, renderW, renderH);
+
+            // Center canvases in drop zone (CSS handles translate(-50%, -50%))
+            // But we add margin offsets to fake the panning
+            imgCanvas.style.top = `calc(50% - ${currentZoomOffsetY}px + ${(currentZoomScale > 1 ? (renderH - ch) / 2 : 0)}px)`;
+            imgCanvas.style.left = `calc(50% - ${currentZoomOffsetX}px + ${(currentZoomScale > 1 ? (renderW - cw) / 2 : 0)}px)`;
+
+            // Prepare overlay canvas
+            overlayCanvas.width = renderW;
+            overlayCanvas.height = renderH;
+            overlayCanvas.style.top = `calc(50% - ${currentZoomOffsetY}px + ${(currentZoomScale > 1 ? (renderH - ch) / 2 : 0)}px)`;
+            overlayCanvas.style.left = `calc(50% - ${currentZoomOffsetX}px + ${(currentZoomScale > 1 ? (renderW - cw) / 2 : 0)}px)`;
+
+            const oCtx = overlayCanvas.getContext('2d');
+            oCtx.clearRect(0, 0, renderW, renderH);
+
+            const gLineTop = document.getElementById('global-line-top');
+            const gLineBottom = document.getElementById('global-line-bottom');
+            if (gLineTop) gLineTop.style.display = 'none';
+            if (gLineBottom) gLineBottom.style.display = 'none';
+
+            // --- Add Interactivity to Overlay Canvas ---
+            // If listeners aren't attached yet, attach them once
+            if (!overlayCanvas.dataset.interactive) {
+                overlayCanvas.dataset.interactive = 'true';
+                let isDraggingHeading = false;
+                let lastDragX = 0;
+
+                overlayCanvas.addEventListener('pointerdown', (e) => {
+                    if (!currentBBox) return; // Only allow drag if we have a boat
+                    isDraggingHeading = true;
+                    lastDragX = e.clientX;
+                    overlayCanvas.setPointerCapture(e.pointerId);
+                    overlayCanvas.style.cursor = 'ew-resize';
+                });
+
+                overlayCanvas.addEventListener('pointermove', (e) => {
+                    if (!isDraggingHeading) return;
+
+                    const deltaX = e.clientX - lastDragX;
+                    lastDragX = e.clientX;
+
+                    // Adjust sensitivity: 1 pixel drag = 0.5 degrees
+                    matchHeading = (matchHeading - deltaX * 0.5) % 360;
+                    if (matchHeading < 0) matchHeading += 360;
+
+                    // Sync the UI slider
+                    const headingSlider = document.getElementById('heading-slider');
+                    const headingVal = document.getElementById('heading-val');
+                    if (headingSlider) headingSlider.value = matchHeading;
+                    if (headingVal) headingVal.textContent = Math.round(matchHeading) + '°';
+
+                    drawOverlay(lastPredictions); // Redraw
+
+                    if (!isOverlayMode) {
+                        updateModelHeading();
+                    } else {
+                        boatContainer.rotation.y = THREE.MathUtils.degToRad(matchHeading);
+                        if (boxHelper) boxHelper.update();
+                    }
+                });
+
+                window.addEventListener('pointerup', (e) => {
+                    if (isDraggingHeading) {
+                        isDraggingHeading = false;
+                        overlayCanvas.releasePointerCapture(e.pointerId);
+                        overlayCanvas.style.cursor = 'crosshair';
+                    }
+                });
+            }
+
+            // Scale factor to map natural image coords to render coords
+            const scale = renderW / imageElement.naturalWidth;
+
+            if (predictions.length > 0) {
+                let bestMatch = null;
+                // find largest 'boat' bounding box
+                predictions.forEach(p => {
+                    if (p.class === 'boat') {
+                        if (!bestMatch || p.bbox[2] > bestMatch.bbox[2]) {
+                            bestMatch = p;
+                        }
+                    }
+                });
+
+                if (bestMatch) {
+                    const [x, y, w, h] = bestMatch.bbox;
+                    const rx = x * scale;
+                    const ry = y * scale;
+                    const rw = w * scale;
+                    const rh = h * scale;
+
+                    oCtx.strokeStyle = '#ffffff';
+                    oCtx.lineWidth = 2; // thinner lines as requested
+
+                    // --- Auto Spotlight Effect ---
+                    // Darken background and cut out hole for tracked boat during overlay
+                    if (isOverlayMode) {
+                        const spotGrad = oCtx.createRadialGradient(rx + rw / 2, ry + rh / 2, Math.max(rw, rh) * 1.5, rx + rw / 2, ry + rh / 2, Math.max(rw, rh) * 3);
+                        spotGrad.addColorStop(0, 'rgba(255,255,255,0)');
+                        spotGrad.addColorStop(1, 'rgba(255,255,255,0.7)');
+
+                        oCtx.fillStyle = spotGrad;
+                        oCtx.fillRect(0, 0, renderW, renderH);
+                    }
+
+                    // --- Draw Accurate 3D Cuboid Projection ---
+                    if (currentModelMesh && currentBoatLength > 0) {
+                        const box3 = new THREE.Box3().setFromObject(currentModelMesh);
+                        const min = box3.min;
+                        const max = box3.max;
+                        const corners = [
+                            new THREE.Vector3(min.x, min.y, min.z),
+                            new THREE.Vector3(max.x, min.y, min.z),
+                            new THREE.Vector3(max.x, min.y, max.z),
+                            new THREE.Vector3(min.x, min.y, max.z),
+                            new THREE.Vector3(min.x, max.y, min.z),
+                            new THREE.Vector3(max.x, max.y, min.z),
+                            new THREE.Vector3(max.x, max.y, max.z),
+                            new THREE.Vector3(min.x, max.y, max.z)
+                        ];
+
+                        const euler = new THREE.Euler(0, THREE.MathUtils.degToRad(matchHeading), 0, 'YXZ');
+                        const dist = estimatedDistance || 10;
+
+                        // Create a temporary camera matching the photograph's field of view
+                        const tempCam = new THREE.PerspectiveCamera(cameraHFOV, renderW / renderH, 0.1, 5000);
+                        tempCam.position.set(0, 0, 0);
+                        tempCam.lookAt(0, 0, -1);
+                        tempCam.updateMatrixWorld();
+
+                        // Project the center of the bounding box at the estimated distance
+                        const cx = rx + rw / 2;
+                        const cy = ry + rh / 2;
+                        const nx = (cx / renderW) * 2 - 1;
+                        const ny = -(cy / renderH) * 2 + 1; // Flipped Y for NDC
+
+                        // Where is the boat exactly in 3D space to line up with the 2D box?
+                        const centerPos = new THREE.Vector3(nx, ny, 0.5).unproject(tempCam);
+                        centerPos.sub(tempCam.position).normalize().multiplyScalar(dist);
+
+                        // Align bottom of boat slightly up for aesthetics when bounding
+                        const projCorners = corners.map(c => {
+                            const pt = c.clone();
+                            pt.applyEuler(euler);
+                            pt.add(centerPos);
+                            pt.project(tempCam);
+                            return {
+                                x: (pt.x * 0.5 + 0.5) * renderW,
+                                y: (-(pt.y * 0.5) + 0.5) * renderH
+                            };
+                        });
+
+                        // Draw 3D wireframe
+                        oCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                        oCtx.lineWidth = 1.5;
+                        oCtx.beginPath();
+                        // Bottom face
+                        oCtx.moveTo(projCorners[0].x, projCorners[0].y); oCtx.lineTo(projCorners[1].x, projCorners[1].y);
+                        oCtx.lineTo(projCorners[2].x, projCorners[2].y); oCtx.lineTo(projCorners[3].x, projCorners[3].y);
+                        oCtx.closePath();
+                        // Top face
+                        oCtx.moveTo(projCorners[4].x, projCorners[4].y); oCtx.lineTo(projCorners[5].x, projCorners[5].y);
+                        oCtx.lineTo(projCorners[6].x, projCorners[6].y); oCtx.lineTo(projCorners[7].x, projCorners[7].y);
+                        oCtx.closePath();
+                        // Vertical edges
+                        oCtx.moveTo(projCorners[0].x, projCorners[0].y); oCtx.lineTo(projCorners[4].x, projCorners[4].y);
+                        oCtx.moveTo(projCorners[1].x, projCorners[1].y); oCtx.lineTo(projCorners[5].x, projCorners[5].y);
+                        oCtx.moveTo(projCorners[2].x, projCorners[2].y); oCtx.lineTo(projCorners[6].x, projCorners[6].y);
+                        oCtx.moveTo(projCorners[3].x, projCorners[3].y); oCtx.lineTo(projCorners[7].x, projCorners[7].y);
+                        oCtx.stroke();
+
+                        // --- Draw Heading Vector (Arrow) ---
+                        // Project a point further forward along the boat's heading Z axis
+                        const arrowBasePt = centerPos.clone(); // The middle of the boat
+
+                        // Move forward along the heading vector. Local Z is forward.
+                        const forwardVec = new THREE.Vector3(0, 0, 1).applyEuler(euler);
+                        const arrowTipPt = centerPos.clone().add(forwardVec.multiplyScalar(currentBoatLength)); // Arrow length = boat length
+
+                        arrowBasePt.project(tempCam);
+                        arrowTipPt.project(tempCam);
+
+                        const basePxX = (arrowBasePt.x * 0.5 + 0.5) * renderW;
+                        const basePxY = (-(arrowBasePt.y * 0.5) + 0.5) * renderH;
+                        const tipPxX = (arrowTipPt.x * 0.5 + 0.5) * renderW;
+                        const tipPxY = (-(arrowTipPt.y * 0.5) + 0.5) * renderH;
+
+                        // Draw thick blue line
+                        oCtx.strokeStyle = '#3b82f6'; // Tailwind blue-500
+                        oCtx.lineWidth = 4;
+                        oCtx.beginPath();
+                        oCtx.moveTo(basePxX, basePxY);
+                        oCtx.lineTo(tipPxX, tipPxY);
+                        oCtx.stroke();
+
+                        // Draw arrowhead
+                        const angle = Math.atan2(tipPxY - basePxY, tipPxX - basePxX);
+                        const headLen = 15;
+                        oCtx.fillStyle = '#3b82f6';
+                        oCtx.beginPath();
+                        oCtx.moveTo(tipPxX, tipPxY);
+                        oCtx.lineTo(tipPxX - headLen * Math.cos(angle - Math.PI / 6), tipPxY - headLen * Math.sin(angle - Math.PI / 6));
+                        oCtx.lineTo(tipPxX - headLen * Math.cos(angle + Math.PI / 6), tipPxY - headLen * Math.sin(angle + Math.PI / 6));
+                        oCtx.lineTo(tipPxX, tipPxY);
+                        oCtx.fill();
+
+                        // Draw blue dot at origin
+                        oCtx.beginPath();
+                        oCtx.arc(basePxX, basePxY, 6, 0, 2 * Math.PI);
+                        oCtx.fill();
+
+                        // Standard 2D bounding box
+                        oCtx.strokeStyle = '#22c55e'; // Green
+                        oCtx.lineWidth = 2;
+                        oCtx.strokeRect(rx, ry, rw, rh);
+
+                    } else {
+                        // Standard 2D bounding box fallback
+                        oCtx.strokeStyle = '#22c55e'; // Green
+                        oCtx.strokeRect(rx, ry, rw, rh);
+                    }
+
+                    // Calculate Box screen positions
+                    const boxTop = ry;
+                    const boxBottom = ry + rh;
+
+                    // Update global horizontal matching lines
+                    const canvasRect = imgCanvas.getBoundingClientRect();
+                    if (gLineTop) {
+                        gLineTop.style.display = 'block';
+                        gLineTop.style.top = (canvasRect.top + boxTop) + 'px';
+                    }
+                    if (gLineBottom) {
+                        gLineBottom.style.display = 'block';
+                        gLineBottom.style.top = (canvasRect.top + boxBottom) + 'px';
+                    }
+
+                    const hLine = document.getElementById('global-horizon-line');
+                    if (hLine) {
+                        hLine.style.display = 'block';
+                        // Horizon is dynamically placed based on camera lookAt Y
+                        const eyeLevel = currentBoatLength ? Math.max(2, currentBoatLength * 0.2) : 2;
+                        // Map eyeLevel (world Y) to screen space on the right canvas
+                        const tempV = new THREE.Vector3(0, eyeLevel, 0).project(camera);
+                        const rightRect = document.getElementById('canvas-container').getBoundingClientRect();
+                        const screenY = (-(tempV.y) * 0.5 + 0.5) * rightRect.height;
+                        hLine.style.top = (rightRect.top + screenY) + 'px';
+                    }
+
+                    oCtx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                    oCtx.fillRect(rx, ry, rw, rh);
+
+                    // --- Labels ---
+                    const fp = document.getElementById('floating-metrics');
+                    if (fp) {
+                        fp.style.display = 'flex';
+                        // Center horizontally on boat, 10px above top
+                        fp.style.left = (rx + rw / 2) + 'px';
+                        fp.style.top = ry + 'px';
+
+                        document.getElementById('out-px').textContent = Math.round(rw) + ' px';
+                        const currentBoatFeet = currentBoatLength * 3.28084;
+                        document.getElementById('out-len').textContent = Math.round(currentBoatFeet) + ' ft';
+
+                        const distEl = document.getElementById('out-dist');
+                        if (estimatedDistance) {
+                            distEl.textContent = estimatedDistance.toFixed(1) + ' m';
+                        } else {
+                            distEl.textContent = '-- m';
+                        }
+                    }
+
+                    // Handle Confirm/Merge Button floating logic
+                    const btnConfirm = document.getElementById('btn-confirm');
+                    if (btnConfirm && !hasConfirmedMatch) {
+                        btnConfirm.style.display = 'block';
+                    }
+
+                    // Corner Label: AI guess (Keep mapped to canvas text)
+                    // oCtx.fillStyle = '#ffffff';
+                    // oCtx.textAlign = 'left';
+                    // oCtx.font = '12px Inter';
+                    // oCtx.fillText(`Boat (${Math.round(bestMatch.score * 100)}%)`, rx + 4, ry + 16);
+
+                    // Update state
+                    boxPixelWidth = w; // Use original natural pixels for math
+                    document.getElementById('out-px').textContent = Math.round(w) + ' px';
+
+                    // --- Draw Heading Vector ---
+                    // Center of the bounding box
+                    const cx = rx + rw / 2;
+                    const cy = ry + rh / 2;
+
+                    // Draw dot
+                    oCtx.beginPath();
+                    oCtx.arc(cx, cy, 8, 0, 2 * Math.PI);
+                    oCtx.fillStyle = '#3b82f6'; // blue
+                    oCtx.fill();
+                    oCtx.strokeStyle = '#ffffff';
+                    oCtx.lineWidth = 2;
+                    oCtx.stroke();
+
+                    // Draw Vector Arrow
+                    const angleRad = (matchHeading - 90) * (Math.PI / 180);
+                    const arrowLen = Math.max(rw, rh) * 0.4;
+                    const endX = cx + Math.cos(angleRad) * arrowLen;
+                    const endY = cy + Math.sin(angleRad) * arrowLen;
+
+                    // Draw Line
+                    oCtx.beginPath();
+                    oCtx.moveTo(cx, cy);
+                    oCtx.lineTo(endX, endY);
+                    oCtx.strokeStyle = '#ffffff';
+                    oCtx.lineWidth = 2;
+                    oCtx.stroke();
+
+                    // Draw Arrowhead
+                    const headLen = 12;
+                    const headAngle = Math.PI / 6; // 30 degrees
+
+                    oCtx.beginPath();
+                    oCtx.moveTo(endX, endY);
+                    oCtx.lineTo(endX - headLen * Math.cos(angleRad - headAngle), endY - headLen * Math.sin(angleRad - headAngle));
+                    oCtx.lineTo(endX - headLen * Math.cos(angleRad + headAngle), endY - headLen * Math.sin(angleRad + headAngle));
+                    oCtx.lineTo(endX, endY);
+                    oCtx.fillStyle = '#ffffff';
+                    oCtx.fill();
+
+                    // This handles scaling the distance based on the new box coordinates
+                    if (currentModelMesh) calculateDistance();
+                } else {
+                    document.getElementById('out-px').textContent = '-- px';
+                    document.getElementById('out-dist').textContent = 'No boat detected.';
+                    document.getElementById('out-dist').className = 'val pending';
+                }
+            } else {
+                if (currentBBox && isOverlayMode && currentModelMesh) {
+                    // Manual refresh triggered by distance changes, redraw box and lines
+                    const [x, y, w, h] = currentBBox;
+                    const scale = renderW / imageElement.naturalWidth;
+
+                    const rx = x * scale;
+                    const ry = y * scale;
+                    const rw = w * scale;
+                    const rh = h * scale;
+
+                    const canvasRect = imgCanvas.getBoundingClientRect();
+                    const gLineTop = document.getElementById('global-line-top');
+                    const gLineBottom = document.getElementById('global-line-bottom');
+                    if (gLineTop) {
+                        gLineTop.style.display = 'block';
+                        gLineTop.style.top = (canvasRect.top + ry) + 'px';
+                    }
+                    if (gLineBottom) {
+                        gLineBottom.style.display = 'block';
+                        gLineBottom.style.top = (canvasRect.top + ry + rh) + 'px';
+                    }
+
+                    oCtx.strokeStyle = '#fff';
+                    oCtx.lineWidth = 1; // 1px cuboid as requested
+
+                    // Draw Cuboid
+                    const headingRadCube = THREE.MathUtils.degToRad(matchHeading);
+                    const zScale = 0.3;
+                    const perspectiveTiltY = rh * 0.15; // additional offset to look down on it
+                    const backOffsetX = -Math.sin(headingRadCube) * (rw * zScale);
+                    const backOffsetY = (-Math.cos(headingRadCube) * (rh * zScale)) - perspectiveTiltY;
+
+                    oCtx.fillStyle = 'rgba(255, 255, 255, 0.05)'; // subtle glass fill
+
+                    // Back Face
+                    oCtx.fillRect(rx + backOffsetX, ry + backOffsetY, rw, rh);
+                    oCtx.strokeRect(rx + backOffsetX, ry + backOffsetY, rw, rh);
+
+                    // Front Face
+                    oCtx.fillRect(rx, ry, rw, rh);
+                    oCtx.strokeRect(rx, ry, rw, rh);
+
+                    // Connecting lines (cuboid corners)
+                    oCtx.beginPath();
+                    oCtx.moveTo(rx, ry); oCtx.lineTo(rx + backOffsetX, ry + backOffsetY);
+                    oCtx.moveTo(rx + rw, ry); oCtx.lineTo(rx + rw + backOffsetX, ry + backOffsetY);
+                    oCtx.moveTo(rx, ry + rh); oCtx.lineTo(rx + backOffsetX, ry + rh + backOffsetY);
+                    oCtx.moveTo(rx + rw, ry + rh); oCtx.lineTo(rx + rw + backOffsetX, ry + rh + backOffsetY);
+                    oCtx.stroke();
+
+
+                    const hLine = document.getElementById('global-horizon-line');
+                    if (hLine) {
+                        hLine.style.display = 'block';
+                        const rightRect = document.getElementById('canvas-container').getBoundingClientRect();
+                        hLine.style.top = (rightRect.top + rightRect.height / 2) + 'px';
+                    }
+
+                    // --- Labels ---
+                    const labelPx2D = document.getElementById('label-px-2d');
+                    const labelSize2D = document.getElementById('label-size-2d');
+
+                    const labelPx3D = document.getElementById('label-px-3d');
+                    const labelSize3D = document.getElementById('label-size-3d');
+
+                    const labelDist = document.getElementById('label-dist');
+
+                    const rulerLine2D = document.getElementById('dist-ruler-line-2d');
+                    const rulerLine3D = document.getElementById('dist-ruler-line-3d');
+
+                    const boxCenterX = canvasRect.left + rx + rw / 2;
+                    const absBoxTop = canvasRect.top + ry;
+                    const absBoxBottom = canvasRect.top + ry + rh;
+                    const screenBottom = window.innerHeight;
+                    const screenCenterX = window.innerWidth / 2;
+
+                    labelPx2D.style.display = 'block';
+                    labelSize2D.style.display = 'block';
+                    rulerLine2D.style.display = 'block';
+
+                    labelDist.style.display = 'block';
+
+                    const pixelLabelText = `Pixel Size: ${Math.round(w)} px`;
+                    const sizeLabelText = `Est. Size: ${Math.round(currentBoatLength * 3.28)} ft`;
+
+                    labelPx2D.textContent = pixelLabelText;
+                    labelPx2D.style.left = boxCenterX + 'px';
+                    labelPx2D.style.top = (absBoxTop - 44) + 'px';
+
+                    labelSize2D.innerHTML = sizeLabelText;
+                    labelSize2D.style.left = boxCenterX + 'px';
+                    labelSize2D.style.top = (absBoxTop - 16) + 'px';
+
+                    const distFt = estimatedDistance ? Math.round(estimatedDistance * 3.28084) : '--';
+                    labelDist.innerHTML = `&uarr;&darr; ${distFt} ft`;
+
+                    // Ruler line from center bottom to 2D boat
+                    const diffX2D = boxCenterX - screenCenterX;
+                    const diffY2D = absBoxBottom - screenBottom;
+                    const len2D = Math.sqrt(diffX2D * diffX2D + diffY2D * diffY2D);
+                    const angle2D = Math.atan2(diffY2D, diffX2D);
+
+                    rulerLine2D.style.width = len2D + 'px';
+                    rulerLine2D.style.height = '1px';
+                    rulerLine2D.style.borderLeft = 'none';
+                    rulerLine2D.style.borderTop = '2px dashed rgba(255, 255, 255, 0.4)';
+                    rulerLine2D.style.transformOrigin = '0 0';
+                    rulerLine2D.style.transform = `rotate(${angle2D}rad)`;
+                    rulerLine2D.style.left = screenCenterX + 'px';
+                    rulerLine2D.style.top = screenBottom + 'px';
+
+                    // Place Distance label near origin
+                    labelDist.style.left = screenCenterX + 'px';
+                    labelDist.style.top = (screenBottom - 40) + 'px';
+
+                    // 3D Boat Duplicate Labels
+                    if (!isOverlayMode && currentModelMesh) {
+                        labelPx3D.style.display = 'block';
+                        labelSize3D.style.display = 'block';
+                        rulerLine3D.style.display = 'block';
+
+                        // Calculate right side container bounds to find center
+                        const rightRect = document.getElementById('canvas-container').getBoundingClientRect();
+                        const rightCenterX = rightRect.left + (rightRect.width / 2);
+                        // Horizon is exactly middle of 3D right pane
+                        const horizonY = rightRect.top + rightRect.height / 2;
+
+                        // Approximate the visual bounding box height of the 3D model
+                        // We use the pixel width calculated roughly by boxPixelWidth tracking
+                        const fake3DWidth = boxPixelWidth;
+                        const fake3DHeight = currentBBox ? (currentBBox[3] * (fake3DWidth / currentBBox[2])) : fake3DWidth;
+
+                        // We want the box to start at horizon and go down (since y=0 is horizon target)
+                        const abs3DBoxTop = horizonY - (fake3DHeight / 4); // rough approximation
+                        const abs3DBoxBottom = horizonY + fake3DHeight - (fake3DHeight / 4);
+
+                        labelPx3D.textContent = pixelLabelText;
+                        labelPx3D.style.left = rightCenterX + 'px';
+                        labelPx3D.style.top = (abs3DBoxTop - 44) + 'px';
+
+                        labelSize3D.innerHTML = sizeLabelText;
+                        labelSize3D.style.left = rightCenterX + 'px';
+                        labelSize3D.style.top = (abs3DBoxTop - 16) + 'px';
+
+                        // Ruler line from center bottom to 3D boat
+                        const diffX3D = rightCenterX - screenCenterX;
+                        const diffY3D = abs3DBoxBottom - screenBottom;
+                        const len3D = Math.sqrt(diffX3D * diffX3D + diffY3D * diffY3D);
+                        const angle3D = Math.atan2(diffY3D, diffX3D);
+
+                        rulerLine3D.style.width = len3D + 'px';
+                        rulerLine3D.style.height = '1px';
+                        rulerLine3D.style.borderLeft = 'none';
+                        rulerLine3D.style.borderTop = '2px dashed rgba(255, 255, 255, 0.4)';
+                        rulerLine3D.style.transformOrigin = '0 0';
+                        rulerLine3D.style.transform = `rotate(${angle3D}rad)`;
+                        rulerLine3D.style.left = screenCenterX + 'px';
+                        rulerLine3D.style.top = screenBottom + 'px';
+
+                    } else {
+                        labelPx3D.style.display = 'none';
+                        labelSize3D.style.display = 'none';
+                        rulerLine3D.style.display = 'none';
+                    }
+                }
+            }
+        }
+
+        // ── Drag Interactivity for HTML Labels ──
+        let dragMode = null; // 'size', 'size3d', or 'dist'
+        let dragStartVal = 0;
+        let dragStartY = 0;
+        let dragStartX = 0;
+
+        document.getElementById('label-size-2d').addEventListener('mousedown', (e) => {
+            dragMode = 'size';
+            dragStartX = e.clientX;
+            dragStartVal = currentBoatLength;
+            e.preventDefault();
+        });
+
+        document.getElementById('label-size-3d').addEventListener('mousedown', (e) => {
+            dragMode = 'size';
+            dragStartX = e.clientX;
+            dragStartVal = currentBoatLength;
+            e.preventDefault();
+        });
+
+        document.getElementById('label-dist').addEventListener('mousedown', (e) => {
+            dragMode = 'dist';
+            dragStartY = e.clientY;
+            dragStartVal = estimatedDistance;
+            e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (dragMode === 'size') {
+                const delta = e.clientX - dragStartX;
+                currentBoatLength = Math.max(1, dragStartVal + delta * 0.1);
+
+                // Keep the 3D model internally consistent by simulating a new model length selection
+                const prevScale = VESSEL_SCALES[currentBoatName] || 1;
+                // Since loadFleet standardizes to 1m, and currentModelMesh starts at 1x = 1m
+                currentModelMesh.scale.setScalar(currentBoatLength);
+
+                // Update text fields
+                document.getElementById('out-len').textContent = Math.round(currentBoatLength * 3.28084) + ' ft';
+
+                // We must artificially adjust the estimated distance because resizing the physical model
+                // means it must be closer/further to maintain the same pixel footprint
+                calculateDistance(false);
+                drawOverlay([{ bbox: currentBBox, class: 'boat', score: 1 }]);
+
+                // Keep UI synced for user confidence
+                resetConfirmState();
+            } else if (dragMode === 'dist') {
+                const delta = e.clientY - dragStartY;
+                // Inverse relation visually: dragging UP (negative delta) means further away (higher dist)
+                estimatedDistance = Math.max(1, dragStartVal - delta * 0.5);
+
+                // When forcing distance interactively, we must update the zoom to break the 1-to-1 sync
+                calculateDistance(true); // pass flag to indicate forced distance
+                drawOverlay([{ bbox: currentBBox, class: 'boat', score: 1 }]);
+                resetConfirmState();
+            }
+        });
+
+        window.addEventListener('mouseup', () => { dragMode = null; });
+
+        async function processImageWithAI() {
+            if (!cocoModel) {
+                showStatus('Model still loading, please wait...', 3000);
+                return;
+            }
+
+            showStatus('Detecting boats...');
+            document.getElementById('out-dist').textContent = 'Analyzing...';
+            document.getElementById('out-dist').className = 'val pending';
+
+            try {
+                // COCO-SSD can run on a canvas element directly
+                const allPredictions = await cocoModel.detect(imgCanvas);
+
+                // Filter to boat-related classes
+                const boatClasses = ['boat', 'ship'];
+                let predictions = allPredictions.filter(p => boatClasses.includes(p.class));
+
+                // If no boat found, try to use the largest detection as fallback
+                if (predictions.length === 0 && allPredictions.length > 0) {
+                    // Sort by area descending and take the largest
+                    allPredictions.sort((a, b) => (b.bbox[2] * b.bbox[3]) - (a.bbox[2] * a.bbox[3]));
+                    predictions = [allPredictions[0]];
+                    showStatus(`No boat class found. Using largest detection: "${predictions[0].class}"`, 4000);
+                }
+
+                if (predictions.length === 0) {
+                    showStatus('No objects detected. Try a different image.', 4000);
+                    return;
+                }
+
+                // Pick the largest boat by bounding box area
+                predictions.sort((a, b) => (b.bbox[2] * b.bbox[3]) - (a.bbox[2] * a.bbox[3]));
+                const best = predictions[0];
+
+                // COCO-SSD already returns bbox as [x, y, width, height] in image pixels
+                const formattedPredictions = [{
+                    bbox: best.bbox,
+                    class: best.class,
+                    score: best.score
+                }];
+
+                console.log('COCO-SSD Prediction:', formattedPredictions);
+                drawOverlay(formattedPredictions);
+
+                currentBBox = best.bbox;
+                autoSelectModel(best.bbox[2], best.bbox[3]);
+
+                // Redraw one final time after setting currentBBox so zoom handles correctly
+                drawOverlay(formattedPredictions);
+                align3DBoatToLines();
+
+                document.getElementById('btn-confirm').style.display = 'block';
+                showStatus(`Detected: ${best.class} (${(best.score * 100).toFixed(0)}% confidence)`, 4000);
+
+            } catch (err) {
+                console.error('Detection Error:', err);
+                showStatus('Failed to detect boat.', 4000);
+            }
+        }
+
+        // ── Distance Math ──
+        // Flag prevents overriding interactively dragged distance
+        function calculateDistance(forcedDistance = false) {
+            if (!currentBBox || rawImageWidth === 0 || currentBoatLength === 0 || !currentModelMesh) {
+                document.getElementById('out-dist').textContent = 'Awaiting Detection...';
+                document.getElementById('out-dist').className = 'val pending';
+                return;
+            }
+
+            const hfovRad = THREE.MathUtils.degToRad(cameraHFOV);
+            const focalLengthPx = (rawImageWidth / 2) / Math.tan(hfovRad / 2);
+            globalFocalLengthPx = focalLengthPx;
+
+            const box3 = new THREE.Box3().setFromObject(currentModelMesh);
+            const size3D = new THREE.Vector3();
+            box3.getSize(size3D);
+            const H_3D = size3D.y;
+
+            if (!forcedDistance) {
+                const bboxHeightPx = currentBBox[3];
+                estimatedDistance = H_3D * (focalLengthPx / bboxHeightPx);
+            }
+
+            const estDistFt = estimatedDistance * 3.28084;
+            const outEl = document.getElementById('out-dist');
+            outEl.textContent = Math.round(estDistFt) + ' ft';
+            outEl.className = 'val';
+
+            align3DBoatToLines(forcedDistance);
+        }
+
+        // Accurately lock the 3D camera
+        function align3DBoatToLines(forcedDistance = false) {
+            if (!currentBBox || !currentModelMesh || !imageElement.src || isOverlayMode) return;
+
+            // ... same scaling math for visual 2D match ...
+            const cw = dropZone.clientWidth;
+            const ch = dropZone.clientHeight;
+            const imgAspect = imageElement.naturalWidth / imageElement.naturalHeight;
+            const containerAspect = cw / ch;
+
+            let renderW, renderH;
+            if (imgAspect > containerAspect) {
+                renderW = cw;
+                renderH = cw / imgAspect;
+            } else {
+                renderH = ch;
+                renderW = ch * imgAspect;
+            }
+            const scale = renderW / imageElement.naturalWidth;
+            const rh = currentBBox[3] * scale; // Bounding box pixel height on screen
+
+            // 3D Canvas
+            const rightPaneHeight = document.getElementById('right-panel').clientHeight;
+
+            // 3D Object Height
+            const box3 = new THREE.Box3().setFromObject(currentModelMesh);
+            const size3D = new THREE.Vector3();
+            box3.getSize(size3D);
+            const H_3D = size3D.y;
+
+            // VFOV of the camera
+            const hfovRad = THREE.MathUtils.degToRad(cameraHFOV);
+            const vfovRad = 2 * Math.atan(Math.tan(hfovRad / 2) / camera.aspect);
+
+            // Compute distance needed to render object at exactly `rh` pixels tall on the right screen
+            const visualDistance = H_3D * rightPaneHeight / (2 * rh * Math.tan(vfovRad / 2));
+
+            // Compute Y pan offset to align object with horizontal lines
+            const canvasRect = imgCanvas.getBoundingClientRect();
+            const rightRect = document.getElementById('canvas-container').getBoundingClientRect();
+
+            const boxCenterY = canvasRect.top + (currentBBox[1] * scale) + (rh / 2);
+            const rightCenterY = rightRect.top + rightPaneHeight / 2;
+
+            // Pixel offset downwards
+            const screenOffsetY = rightCenterY - boxCenterY;
+
+            // Convert to world shift
+            const worldShift = screenOffsetY * (H_3D / rh);
+
+            // Set Camera (keep heading angle, but apply exact distance and pan)
+            const headingRad = THREE.MathUtils.degToRad(matchHeading);
+
+            // Assume look target is centered on the boat geometry
+            controls.target.set(0, (H_3D / 2) + worldShift, 0);
+
+            // Fix X and Z based on heading (orbit around the target)
+            camera.position.set(0, (H_3D / 2) + worldShift, visualDistance);
+            controls.update();
+        }
+
+        // ── Animation Loop ──
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+            if (water && water.material.uniforms['time']) {
+                water.material.uniforms['time'].value += dt;
+            }
+            controls.update();
+            renderer.render(scene, camera);
+
+            // --- Palette Scene (Scissor Rendering) ---
+            if (paletteRenderer && paletteItemsData.length > 0) {
+                const pCanvas = paletteRenderer.domElement;
+                // Keep the canvas pixel size in sync with its CSS size (no DPR)
+                const cssW = pCanvas.clientWidth;
+                const cssH = pCanvas.clientHeight;
+                if (pCanvas.width !== cssW || pCanvas.height !== cssH) {
+                    paletteRenderer.setSize(cssW, cssH, false);
+                }
+
+                paletteRenderer.setScissorTest(false);
+                paletteRenderer.setClearColor(0x000000, 0);
+                paletteRenderer.clear();
+                paletteRenderer.setScissorTest(true);
+
+                const cr = pCanvas.getBoundingClientRect();
+                const time = performance.now() * 0.001;
+
+                paletteItemsData.forEach(item => {
+                    if (!item.mesh || !item.scene) return;
+
+                    // Spin gently
+                    item.mesh.rotation.y = time * 0.15;
+
+                    const rect = item.element.getBoundingClientRect();
+
+                    // Skip if element is not within the canvas bounds at all
+                    if (rect.right <= cr.left || rect.left >= cr.right ||
+                        rect.bottom <= cr.top || rect.top >= cr.bottom) return;
+
+                    // Compute viewport/scissor in CSS pixels relative to canvas origin
+                    const vX = Math.round(rect.left - cr.left);
+                    const vW = Math.round(rect.width);
+                    const vH = Math.round(rect.height);
+                    // WebGL scissor Y is from bottom of canvas
+                    const vY = Math.round(cr.bottom - rect.bottom);
+
+                    paletteCamera.aspect = vW / vH;
+                    paletteCamera.updateProjectionMatrix();
+
+                    paletteRenderer.setViewport(vX, vY, vW, vH);
+                    paletteRenderer.setScissor(vX, vY, vW, vH);
+                    paletteRenderer.render(item.scene, paletteCamera);
+                });
+
+                paletteRenderer.setScissorTest(false);
+            }
+        }
+
+        initPalette();
+        animate();
+
+        // Start
+        loadFleet();
+
+    </script>
+</body>
+
+</html>
