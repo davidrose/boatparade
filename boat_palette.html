@@ -119,18 +119,18 @@
             position: absolute;
             top: 6px;
             left: 6px;
-            width: 22px;
-            height: 22px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 9px;
-            font-weight: 600;
+            font-size: 13px;
+            font-weight: 700;
             background: rgba(0, 0, 0, 0.6);
-            color: #aaa;
-            border: 1px solid #444;
+            color: #ccc;
+            border: 1px solid #555;
             z-index: 5;
             cursor: pointer;
             transition: all 0.2s ease;
@@ -454,9 +454,9 @@
 
             // Proportional scaling
             const maxMeters = 27.4;
-            const maxTarget = 2.0;
+            const maxTarget = 2.6;
             const proportionalTarget = Math.sqrt(boat.meters / maxMeters) * maxTarget;
-            const targetSize = Math.max(proportionalTarget, 0.6);
+            const targetSize = Math.max(proportionalTarget, 0.8);
 
             loader.load(`models/${boat.file}`, (gltf) => {
                 const model = gltf.scene;
@@ -496,6 +496,13 @@
                 });
 
                 modelGroup.add(model);
+
+                // Bounding box wireframe
+                const finalBox = new THREE.Box3().setFromObject(model);
+                const boxHelper = new THREE.Box3Helper(finalBox, 0x3b82f6);
+                boxHelper.material.transparent = true;
+                boxHelper.material.opacity = 0.3;
+                modelGroup.add(boxHelper);
             }, undefined, (err) => {
                 console.warn(`Failed to load ${boat.file}:`, err);
             });
