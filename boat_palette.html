@@ -497,18 +497,30 @@
 
                 modelGroup.add(model);
 
-                // Bounding box wireframe — only from VISIBLE meshes
+                // Bounding box wireframe — from visible meshes, parented to model so it rotates
                 const visibleBox = new THREE.Box3();
                 model.traverse(child => {
                     if (child.isMesh && child.visible) {
-                        const childBox = new THREE.Box3().setFromObject(child);
-                        visibleBox.union(childBox);
+                        child.geometry.computeBoundingBox();
+                        const meshBox = child.geometry.boundingBox.clone();
+                        meshBox.applyMatrix4(child.matrixWorld);
+                        visibleBox.union(meshBox);
                     }
                 });
-                const boxHelper = new THREE.Box3Helper(visibleBox, 0xffffff);
-                boxHelper.material.transparent = true;
-                boxHelper.material.opacity = 0.25;
-                modelGroup.add(boxHelper);
+                // Convert to model-local coordinates
+                const invMatrix = new THREE.Matrix4().copy(model.matrixWorld).invert();
+                visibleBox.applyMatrix4(invMatrix);
+                const bSize = new THREE.Vector3();
+                const bCenter = new THREE.Vector3();
+                visibleBox.getSize(bSize);
+                visibleBox.getCenter(bCenter);
+                const boxGeo = new THREE.BoxGeometry(bSize.x, bSize.y, bSize.z);
+                const boxEdges = new THREE.EdgesGeometry(boxGeo);
+                const boxLine = new THREE.LineSegments(boxEdges,
+                    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 })
+                );
+                boxLine.position.copy(bCenter);
+                model.add(boxLine);
             }, undefined, (err) => {
                 console.warn(`Failed to load ${boat.file}:`, err);
             });
@@ -545,7 +557,7 @@
                 if (!isoDragging) {
                     isoModelGroup.rotation.y = t * 0.3;
                 }
-                if (isoBoxHelper) isoBoxHelper.update();
+
                 isoRenderer.render(isoScene, isoCamera);
             }
         }
@@ -694,15 +706,28 @@
 
                 isoModelGroup.add(model);
 
-                // Bounding box — from visible meshes only
+                // Bounding box wireframe — parented to model so it rotates together
                 const isoVisBox = new THREE.Box3();
                 model.traverse(child => {
                     if (child.isMesh && child.visible) {
-                        isoVisBox.union(new THREE.Box3().setFromObject(child));
+                        child.geometry.computeBoundingBox();
+                        const mb = child.geometry.boundingBox.clone();
+                        mb.applyMatrix4(child.matrixWorld);
+                        isoVisBox.union(mb);
                     }
                 });
-                isoBoxHelper = new THREE.Box3Helper(isoVisBox, 0xffffff);
-                isoModelGroup.add(isoBoxHelper);
+                const isoInv = new THREE.Matrix4().copy(model.matrixWorld).invert();
+                isoVisBox.applyMatrix4(isoInv);
+                const ibs = new THREE.Vector3();
+                const ibc = new THREE.Vector3();
+                isoVisBox.getSize(ibs);
+                isoVisBox.getCenter(ibc);
+                const isoEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(ibs.x, ibs.y, ibs.z));
+                isoBoxHelper = new THREE.LineSegments(isoEdges,
+                    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+                );
+                isoBoxHelper.position.copy(ibc);
+                model.add(isoBoxHelper);
 
                 // Heading arrow (draggable)
                 isoArrowGroup = new THREE.Group();
