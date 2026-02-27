@@ -283,13 +283,6 @@
 
 <body>
 
-    <div id="header">
-        <div class="header-left">
-            <h1>LOOKOUT</h1>
-            <span class="subtitle">Boat Reference</span>
-        </div>
-        <span class="badge" id="count-badge">Loading...</span>
-    </div>
 
     <div id="column-headers">
         <div class="col-header">Motorboats</div>
@@ -363,7 +356,7 @@
             createCard(row.sail, 'sail');
         });
 
-        document.getElementById('count-badge').textContent = `${BOATS.length} vessels under 100 ft`;
+
 
         function createCard(boat, type) {
             const card = document.createElement('div');
