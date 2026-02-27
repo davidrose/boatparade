@@ -253,10 +253,11 @@
         }
 
         .heading-overlay .model-label {
-            font-size: 11px;
+            font-size: 18px;
             font-weight: 600;
-            color: rgba(255, 255, 255, 0.5);
-            letter-spacing: 0.5px;
+            color: rgba(255, 255, 255, 0.6);
+            letter-spacing: 0.3px;
+            font-family: 'Inter', sans-serif;
         }
 
         .heading-overlay .heading-deg {
@@ -370,8 +371,8 @@
             scene.background = null;
 
             const camera = new THREE.PerspectiveCamera(35, container.clientWidth / container.clientHeight, 0.1, 500);
-            camera.position.set(2.2, 1.4, 2.8);
-            camera.lookAt(0, 0.1, 0);
+            camera.position.set(2.2, 1.8, 2.8);
+            camera.lookAt(0, -0.1, 0);
 
             const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -667,8 +668,8 @@
             }
 
             // Reset camera
-            entry.camera.position.set(2.2, 1.4, 2.8);
-            entry.camera.lookAt(0, 0.1, 0);
+            entry.camera.position.set(2.2, 1.8, 2.8);
+            entry.camera.lookAt(0, -0.1, 0);
 
             entry.card.classList.remove('expanded');
             backdrop.classList.remove('active');
