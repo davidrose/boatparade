@@ -465,35 +465,47 @@
                 );
                 boxLine.position.copy(bCenter);
                 model.add(boxLine);
+                entry.boxLine = boxLine;
 
-                // Heading arrow
-                const arrowLen = 1.2;
+                // Heading arrow — white, smaller, pointing along +X (front of boat)
+                const arrowLen = 0.8;
+                const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
                 const shaft = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.025, 0.025, arrowLen, 8),
-                    new THREE.MeshBasicMaterial({ color: 0x3b82f6 })
+                    new THREE.CylinderGeometry(0.015, 0.015, arrowLen, 8), arrowMat
                 );
-                shaft.rotation.x = Math.PI / 2;
-                shaft.position.z = arrowLen / 2;
+                shaft.rotation.z = -Math.PI / 2;
+                shaft.position.x = arrowLen / 2;
                 arrowGroup.add(shaft);
 
                 const cone = new THREE.Mesh(
-                    new THREE.ConeGeometry(0.07, 0.2, 8),
-                    new THREE.MeshBasicMaterial({ color: 0x3b82f6 })
+                    new THREE.ConeGeometry(0.05, 0.15, 8), arrowMat
                 );
-                cone.rotation.x = Math.PI / 2;
-                cone.position.z = arrowLen + 0.08;
+                cone.rotation.z = -Math.PI / 2;
+                cone.position.x = arrowLen + 0.06;
                 arrowGroup.add(cone);
-
-                const dot = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.06, 12, 12),
-                    new THREE.MeshBasicMaterial({ color: 0x60a5fa })
-                );
-                arrowGroup.add(dot);
 
                 box.setFromObject(model);
                 const mc = new THREE.Vector3();
                 box.getCenter(mc);
-                arrowGroup.position.set(0, mc.y, 0);
+                arrowGroup.position.set(0, mc.y * 0.3, 0);
+
+                // Heading sprite — large text rendered in 3D above the boat
+                const headCanvas = document.createElement('canvas');
+                headCanvas.width = 256;
+                headCanvas.height = 128;
+                const headCtx = headCanvas.getContext('2d');
+                const headTex = new THREE.CanvasTexture(headCanvas);
+                const headSprite = new THREE.Sprite(
+                    new THREE.SpriteMaterial({ map: headTex, transparent: true, depthTest: false })
+                );
+                headSprite.scale.set(1.6, 0.8, 1);
+                headSprite.position.set(0, Math.max(bSize.y * 1.0 + 0.5, 2.0), 0);
+                headSprite.visible = false;
+                modelGroup.add(headSprite);
+                entry.headSprite = headSprite;
+                entry.headCtx = headCtx;
+                entry.headTex = headTex;
+                entry.headCanvas = headCanvas;
             });
 
             const entry = {
@@ -530,8 +542,10 @@
             entry.card.classList.add('expanded');
             backdrop.classList.add('active');
 
-            // Show heading arrow
+            // Show heading arrow, hide bounding box, show heading sprite
             entry.arrowGroup.visible = true;
+            if (entry.boxLine) entry.boxLine.visible = false;
+            if (entry.headSprite) entry.headSprite.visible = true;
 
             // Create OrbitControls now
             const ctrl = new OrbitControls(entry.camera, entry.renderer.domElement);
@@ -552,8 +566,10 @@
             if (!expandedEntry) return;
             const entry = expandedEntry;
 
-            // Hide arrow
+            // Hide arrow, restore bounding box, hide heading sprite
             entry.arrowGroup.visible = false;
+            if (entry.boxLine) entry.boxLine.visible = true;
+            if (entry.headSprite) entry.headSprite.visible = false;
 
             // Destroy orbit controls
             const ctrl = entry.getControls();
@@ -613,7 +629,31 @@
 
                 // Update orbit controls if expanded
                 const ctrl = e.getControls();
-                if (ctrl) ctrl.update();
+                if (ctrl) {
+                    ctrl.update();
+
+                    // Compute heading: 0° = boat front (+X) aimed at camera
+                    if (e.headCtx && e.headTex) {
+                        // Camera azimuth angle
+                        const camDir = new THREE.Vector3();
+                        e.camera.getWorldPosition(camDir);
+                        camDir.sub(ctrl.target);
+                        const camAzimuth = Math.atan2(camDir.z, camDir.x);
+                        // Boat forward is +X in model space, rotated by modelGroup.rotation.y
+                        const boatAzimuth = e.modelGroup.rotation.y;
+                        let heading = THREE.MathUtils.radToDeg(boatAzimuth - camAzimuth);
+                        heading = ((heading % 360) + 360) % 360;
+
+                        const ctx = e.headCtx;
+                        ctx.clearRect(0, 0, 256, 128);
+                        ctx.font = 'bold 72px Inter, sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                        ctx.fillText(Math.round(heading) + '°', 128, 64);
+                        e.headTex.needsUpdate = true;
+                    }
+                }
 
                 // Render if visible
                 const r = e.container.getBoundingClientRect();
