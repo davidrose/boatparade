@@ -736,8 +736,8 @@
                         camPos.sub(ctrl.target);
                         const camAzimuth = Math.atan2(camPos.x, camPos.z);
                         const boatRot = e.modelGroup.rotation.y;
-                        // Bow direction offset: +X boats need +PI/2 offset from +Z
-                        const bowOffset = e.bowAlongX ? Math.PI / 2 : 0;
+                        // Bow direction offset: +X boats need +PI offset
+                        const bowOffset = e.bowAlongX ? Math.PI : Math.PI / 2;
                         let heading = THREE.MathUtils.radToDeg(boatRot + bowOffset - camAzimuth);
                         heading = ((heading % 360) + 360) % 360;
 
