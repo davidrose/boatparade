@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boat State Vector & Covariance</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0e1a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: 'Inter', 'SF Pro', system-ui, sans-serif;
+            color: #c8d6e5;
+            overflow: hidden;
+        }
+
+        h1 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin-bottom: 16px;
+            color: #6ec6ff;
+            text-shadow: 0 0 20px rgba(110, 198, 255, 0.3);
+        }
+
+        canvas {
+            border-radius: 12px;
+            box-shadow: 0 0 40px rgba(110, 198, 255, 0.08), 0 4px 24px rgba(0, 0, 0, 0.5);
+        }
+
+        .controls {
+            margin-top: 18px;
+            display: flex;
+            gap: 14px;
+            align-items: center;
+        }
+
+        button {
+            background: linear-gradient(135deg, #1a2a44, #0f1b2e);
+            border: 1px solid rgba(110, 198, 255, 0.25);
+            color: #6ec6ff;
+            padding: 8px 20px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            letter-spacing: 0.3px;
+        }
+
+        button:hover {
+            background: linear-gradient(135deg, #243a5e, #162640);
+            border-color: rgba(110, 198, 255, 0.5);
+            box-shadow: 0 0 12px rgba(110, 198, 255, 0.15);
+        }
+
+        .legend {
+            font-size: 0.75rem;
+            color: #5a7a9a;
+            margin-top: 10px;
+            display: flex;
+            gap: 24px;
+        }
+
+        .legend span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Boat State Estimation — Covariance Visualization</h1>
+    <canvas id="canvas" width="1000" height="600"></canvas>
+    <div class="controls">
+        <button id="btnRestart">Restart</button>
+        <button id="btnPause">Pause</button>
+        <button id="btnSpeed">Speed: 1×</button>
+    </div>
+    <div class="legend">
+        <span><span class="dot" style="background:#00e5ff"></span> State Vector</span>
+        <span><span class="dot" style="background:rgba(255,170,50,0.6)"></span> Covariance Ellipse</span>
+        <span><span class="dot" style="background:rgba(110,198,255,0.15)"></span> Trail</span>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width;
+        const H = canvas.height;
+
+        // --- State ---
+        let t = 0;
+        let paused = false;
+        let speed = 1;
+        const speeds = [1, 2, 4];
+        let speedIdx = 0;
+        let trail = []; // {x, y, heading, covMajor, covMinor, covAngle}
+
+        // --- Path definition (parametric boat path) ---
+        function boatPath(t) {
+            // A gentle S-curve across the canvas
+            const x = 80 + t * 5.5;
+            const baseY = H / 2;
+            const y = baseY + Math.sin(t * 0.04) * 120 + Math.cos(t * 0.018) * 40;
+            return { x, y };
+        }
+
+        function boatHeading(t) {
+            const dt = 0.5;
+            const p0 = boatPath(t);
+            const p1 = boatPath(t + dt);
+            return Math.atan2(p1.y - p0.y, p1.x - p0.x);
+        }
+
+        // Covariance grows with time (process noise accumulation)
+        function covariance(t) {
+            const baseNoise = 4;
+            const growthRate = 0.12;
+            const major = baseNoise + t * growthRate + Math.sin(t * 0.06) * 2;
+            const minor = (baseNoise * 0.4) + t * growthRate * 0.35 + Math.cos(t * 0.08) * 1;
+            // Covariance ellipse tilts slightly with heading variation
+            const angle = boatHeading(t) + Math.sin(t * 0.03) * 0.15;
+            return { major: Math.min(major, 45), minor: Math.min(minor, 22), angle };
+        }
+
+        // --- Drawing ---
+        function drawGrid() {
+            const spacing = 40;
+            ctx.strokeStyle = 'rgba(110,198,255,0.06)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < W; x += spacing) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, H);
+                ctx.stroke();
+            }
+            for (let y = 0; y < H; y += spacing) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(W, y);
+                ctx.stroke();
+            }
+            // Axis labels
+            ctx.fillStyle = 'rgba(110,198,255,0.15)';
+            ctx.font = '10px Inter, system-ui';
+            ctx.textAlign = 'center';
+            for (let x = spacing; x < W; x += spacing * 2) {
+                ctx.fillText(`${Math.round(x / spacing * 10)}m`, x, H - 6);
+            }
+            ctx.textAlign = 'right';
+            for (let y = spacing; y < H; y += spacing * 2) {
+                ctx.fillText(`${Math.round((H - y) / spacing * 10)}m`, 30, y + 3);
+            }
+        }
+
+        function drawEllipse(cx, cy, major, minor, angle, style) {
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(angle);
+            ctx.beginPath();
+            ctx.ellipse(0, 0, major, minor, 0, 0, Math.PI * 2);
+            if (style.fill) {
+                ctx.fillStyle = style.fill;
+                ctx.fill();
+            }
+            if (style.stroke) {
+                ctx.strokeStyle = style.stroke;
+                ctx.lineWidth = style.lineWidth || 1.5;
+                ctx.setLineDash(style.dash || []);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            ctx.restore();
+        }
+
+        function drawBoat(x, y, heading, size) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(heading);
+
+            // Boat triangle
+            const len = size;
+            const halfW = size * 0.45;
+            ctx.beginPath();
+            ctx.moveTo(len, 0);           // nose
+            ctx.lineTo(-len * 0.5, -halfW);  // back-left
+            ctx.lineTo(-len * 0.35, 0);      // back indent
+            ctx.lineTo(-len * 0.5, halfW);   // back-right
+            ctx.closePath();
+
+            const grad = ctx.createLinearGradient(-len, 0, len, 0);
+            grad.addColorStop(0, '#1a3a5c');
+            grad.addColorStop(1, '#00e5ff');
+            ctx.fillStyle = grad;
+            ctx.fill();
+            ctx.strokeStyle = '#00e5ff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Glow
+            ctx.shadowColor = '#00e5ff';
+            ctx.shadowBlur = 12;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            ctx.restore();
+        }
+
+        function drawStateVector(x, y, heading, length) {
+            const ex = x + Math.cos(heading) * length;
+            const ey = y + Math.sin(heading) * length;
+
+            // Arrow line
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(ex, ey);
+            ctx.strokeStyle = '#00e5ff';
+            ctx.lineWidth = 2.5;
+            ctx.shadowColor = '#00e5ff';
+            ctx.shadowBlur = 8;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Arrowhead
+            const headLen = 10;
+            const a1 = heading + Math.PI * 0.82;
+            const a2 = heading - Math.PI * 0.82;
+            ctx.beginPath();
+            ctx.moveTo(ex, ey);
+            ctx.lineTo(ex + Math.cos(a1) * headLen, ey + Math.sin(a1) * headLen);
+            ctx.moveTo(ex, ey);
+            ctx.lineTo(ex + Math.cos(a2) * headLen, ey + Math.sin(a2) * headLen);
+            ctx.strokeStyle = '#00e5ff';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+        }
+
+        function drawTrail() {
+            // Past covariance ellipses (fading)
+            for (let i = 0; i < trail.length; i++) {
+                const p = trail[i];
+                const age = trail.length - i;
+                const alpha = Math.max(0.03, 0.35 - age * 0.006);
+
+                // Ellipse offset to the front of boat
+                const ellipseX = p.x + Math.cos(p.heading) * 18;
+                const ellipseY = p.y + Math.sin(p.heading) * 18;
+
+                drawEllipse(ellipseX, ellipseY, p.covMajor, p.covMinor, p.covAngle, {
+                    fill: `rgba(255,170,50,${alpha * 0.25})`,
+                    stroke: `rgba(255,170,50,${alpha})`,
+                    lineWidth: 1,
+                    dash: [3, 3]
+                });
+            }
+
+            // Path line
+            if (trail.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(trail[0].x, trail[0].y);
+                for (let i = 1; i < trail.length; i++) {
+                    ctx.lineTo(trail[i].x, trail[i].y);
+                }
+                ctx.strokeStyle = 'rgba(110,198,255,0.12)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Dot trail
+                for (let i = 0; i < trail.length; i += 4) {
+                    const p = trail[i];
+                    const alpha = Math.max(0.08, 0.4 - (trail.length - i) * 0.005);
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(110,198,255,${alpha})`;
+                    ctx.fill();
+                }
+            }
+        }
+
+        function drawLabels(x, y, heading, cov) {
+            // State vector label
+            const labelX = x + Math.cos(heading) * 70 + 10;
+            const labelY = y + Math.sin(heading) * 70 - 12;
+
+            ctx.font = '11px Inter, system-ui';
+            ctx.fillStyle = '#00e5ff';
+            ctx.textAlign = 'left';
+            ctx.fillText('v⃗ state', labelX, labelY);
+
+            // Covariance label near the ellipse
+            const covLabelX = x + Math.cos(heading) * 18 + Math.cos(heading + Math.PI / 2) * (cov.minor + 8);
+            const covLabelY = y + Math.sin(heading) * 18 + Math.sin(heading + Math.PI / 2) * (cov.minor + 8);
+            ctx.fillStyle = 'rgba(255,170,50,0.7)';
+            ctx.font = '10px Inter, system-ui';
+            ctx.fillText(`σ: ±${cov.major.toFixed(1)}m`, covLabelX, covLabelY);
+        }
+
+        function drawHUD() {
+            ctx.fillStyle = 'rgba(110,198,255,0.5)';
+            ctx.font = '11px Inter, system-ui';
+            ctx.textAlign = 'left';
+            const pos = boatPath(t);
+            ctx.fillText(`t = ${(t * 0.1).toFixed(1)}s`, 14, 22);
+            ctx.fillText(`x = ${pos.x.toFixed(0)}  y = ${pos.y.toFixed(0)}`, 14, 38);
+            const cov = covariance(t);
+            ctx.fillText(`σ_major = ${cov.major.toFixed(2)}m`, 14, 54);
+            ctx.fillText(`σ_minor = ${cov.minor.toFixed(2)}m`, 14, 70);
+        }
+
+        // --- Main Loop ---
+        function frame() {
+            ctx.clearRect(0, 0, W, H);
+
+            // Background gradient
+            const bg = ctx.createRadialGradient(W / 2, H / 2, 100, W / 2, H / 2, W);
+            bg.addColorStop(0, '#0f1829');
+            bg.addColorStop(1, '#060a12');
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, W, H);
+
+            drawGrid();
+
+            if (!paused) {
+                const pos = boatPath(t);
+                const heading = boatHeading(t);
+                const cov = covariance(t);
+
+                // Record trail every few frames
+                if (t % 3 < 1) {
+                    trail.push({
+                        x: pos.x, y: pos.y, heading,
+                        covMajor: cov.major, covMinor: cov.minor, covAngle: cov.angle
+                    });
+                }
+
+                t += speed;
+
+                // Reset when boat goes off screen
+                if (pos.x > W - 40) {
+                    t = 0;
+                    trail = [];
+                }
+            }
+
+            const pos = boatPath(t);
+            const heading = boatHeading(t);
+            const cov = covariance(t);
+
+            drawTrail();
+
+            // Current covariance ellipse (at boat nose)
+            const noseX = pos.x + Math.cos(heading) * 18;
+            const noseY = pos.y + Math.sin(heading) * 18;
+
+            // Sigma ellipses: 1σ, 2σ, 3σ
+            drawEllipse(noseX, noseY, cov.major * 3, cov.minor * 3, cov.angle, {
+                fill: 'rgba(255,170,50,0.03)',
+                stroke: 'rgba(255,170,50,0.12)',
+                lineWidth: 0.8,
+                dash: [2, 6]
+            });
+            drawEllipse(noseX, noseY, cov.major * 2, cov.minor * 2, cov.angle, {
+                fill: 'rgba(255,170,50,0.06)',
+                stroke: 'rgba(255,170,50,0.25)',
+                lineWidth: 1,
+                dash: [3, 4]
+            });
+            drawEllipse(noseX, noseY, cov.major, cov.minor, cov.angle, {
+                fill: 'rgba(255,170,50,0.12)',
+                stroke: 'rgba(255,170,50,0.7)',
+                lineWidth: 1.5,
+                dash: []
+            });
+
+            // State vector arrow
+            drawStateVector(pos.x, pos.y, heading, 55);
+
+            // Boat
+            drawBoat(pos.x, pos.y, heading, 16);
+
+            // Labels
+            drawLabels(pos.x, pos.y, heading, cov);
+            drawHUD();
+
+            requestAnimationFrame(frame);
+        }
+
+        frame();
+
+        // --- Controls ---
+        document.getElementById('btnRestart').addEventListener('click', () => {
+            t = 0;
+            trail = [];
+        });
+
+        document.getElementById('btnPause').addEventListener('click', () => {
+            paused = !paused;
+            document.getElementById('btnPause').textContent = paused ? 'Play' : 'Pause';
+        });
+
+        document.getElementById('btnSpeed').addEventListener('click', () => {
+            speedIdx = (speedIdx + 1) % speeds.length;
+            speed = speeds[speedIdx];
+            document.getElementById('btnSpeed').textContent = `Speed: ${speed}×`;
+        });
+    </script>
+
+</body>
+
+</html>

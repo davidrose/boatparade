@@ -75,7 +75,7 @@
             const discMat = new THREE.MeshBasicMaterial({
                 color: 0x80c8ff,
                 transparent: true,
-                opacity: 0.20,
+                opacity: 0.4,
                 side: THREE.DoubleSide,
                 depthWrite: false,
             });
@@ -86,11 +86,11 @@
             const group = new THREE.Group();
             group.add(disc);
 
-            const wedgeWidth = radius * 0.3;
+            const wedgeWidth = radius * 0.2;
             const pts = new Float32Array([
                 0, 0, -radius * 0.95,
-                wedgeWidth/2, 0, -radius * 0.6,
-                -wedgeWidth/2, 0, -radius * 0.6
+                wedgeWidth / 2, 0, -radius * 0.6,
+                -wedgeWidth / 2, 0, -radius * 0.6
             ]);
             const wedgeGeo = new THREE.BufferGeometry();
             wedgeGeo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
@@ -235,7 +235,7 @@
                 const lineMat = new THREE.LineBasicMaterial({
                     color: 0xffffff,
                     transparent: true,
-                    opacity: 0.6,
+                    opacity: 0.8,
                     depthWrite: false
                 });
 
